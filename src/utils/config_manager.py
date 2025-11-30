@@ -135,10 +135,13 @@ class ConfigManager:
         """Convert lane configs to JSON-serializable format"""
         serialized = []
         for lane in lane_configs:
+            # Support both 'poly' and 'points' keys for backward compatibility
+            points = lane.get('poly', lane.get('points', []))
             serialized.append({
-                'points': lane['points'],
+                'points': points,
                 'label': lane.get('label', 'Unnamed Lane'),
-                'allowed_types': lane.get('allowed_types', [])
+                'allowed_types': lane.get('allowed_types', []),
+                'allowed_labels': lane.get('allowed_labels', ['all'])
             })
         return serialized
     
@@ -198,9 +201,10 @@ class ConfigManager:
         lanes = []
         for lane in lanes_data:
             lanes.append({
-                'points': lane['points'],
+                'poly': lane['points'],  # Use 'poly' key for integrated_main.py compatibility
                 'label': lane.get('label', 'Unnamed Lane'),
-                'allowed_types': lane.get('allowed_types', [])
+                'allowed_types': lane.get('allowed_types', []),
+                'allowed_labels': lane.get('allowed_labels', ['all'])
             })
         return lanes
     

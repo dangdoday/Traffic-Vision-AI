@@ -562,7 +562,7 @@ class MainWindow(QMainWindow):
         print(f"📹 Selected video: {video_path}")
         
         # Now setup the UI
-        self.setWindowTitle("Traffic Violation Detector - Integrated")
+        self.setWindowTitle("Traffic Violation by dangdoday")
         self.setGeometry(50, 50, 1600, 900)
         
         # Pre-load YOLO model in main thread to avoid DLL issues in QThread
@@ -593,6 +593,16 @@ class MainWindow(QMainWindow):
         self.tl_color_frame_count = 0  # Counter for color update throttling
         self.cap = None  # Will be set when video loads
         print("✅ Manual TL ROI mode enabled")
+        
+        # View toggle flags
+        self.show_lanes_flag = True
+        self.show_stopline_flag = True
+        self.show_traffic_lights_flag = True
+        self.show_ref_vector_flag = True
+        
+        # Lane editing state
+        self.editing_lane_idx = None
+        self.dragging_lane_point_idx = None
         
         # Initialize display scale variables for accurate click detection
         self.current_display_scale = 1.0
@@ -670,8 +680,6 @@ class MainWindow(QMainWindow):
         
         # Lane management
         control_layout.addWidget(QLabel("Lane Management"))
-        self.lane_list = QListWidget()
-        control_layout.addWidget(self.lane_list)
         
         self.btn_add_lane = QPushButton("Add Lane (Click on video)")
         self.btn_add_lane.clicked.connect(self.start_add_lane)
@@ -739,9 +747,6 @@ class MainWindow(QMainWindow):
         self.btn_finish_direction_roi.clicked.connect(self.finish_direction_roi)
         self.btn_finish_direction_roi.setEnabled(False)
         control_layout.addWidget(self.btn_finish_direction_roi)
-        
-        self.direction_roi_list = QListWidget()
-        control_layout.addWidget(self.direction_roi_list)
         
         self.btn_delete_direction_roi = QPushButton("Delete Selected Direction ROI")
         self.btn_delete_direction_roi.clicked.connect(self.delete_direction_roi)
@@ -936,7 +941,7 @@ class MainWindow(QMainWindow):
         # Edit direction ROI
         action_edit_direction = QAction("Edit Selected Direction ROI", self)
         action_edit_direction.triggered.connect(self.start_edit_direction_roi)
-        action_edit_direction.setEnabled(self.direction_roi_list.currentRow() >= 0)
+        action_edit_direction.setEnabled(len(DIRECTION_ROIS) > 0)
         edit_menu.addAction(action_edit_direction)
         
         # Smooth ROI
@@ -966,7 +971,7 @@ class MainWindow(QMainWindow):
         
         action_delete_lane = QAction("Delete Selected Lane", self)
         action_delete_lane.triggered.connect(self.delete_lane)
-        action_delete_lane.setEnabled(self.lane_list.currentRow() >= 0)
+        action_delete_lane.setEnabled(len(LANE_CONFIGS) > 0)
         delete_menu.addAction(action_delete_lane)
         
         action_delete_stopline = QAction("Delete Stop Line", self)
@@ -981,7 +986,7 @@ class MainWindow(QMainWindow):
         
         action_delete_direction = QAction("Delete Direction ROI", self)
         action_delete_direction.triggered.connect(self.delete_direction_roi)
-        action_delete_direction.setEnabled(self.direction_roi_list.currentRow() >= 0)
+        action_delete_direction.setEnabled(len(DIRECTION_ROIS) > 0)
         delete_menu.addAction(action_delete_direction)
         
         menu.addSeparator()
@@ -1041,7 +1046,39 @@ class MainWindow(QMainWindow):
             frame_x = int(click_x / self.current_display_scale)
             frame_y = int(click_y / self.current_display_scale)
             
-            # Handle ROI editing mode first
+            # Handle lane editing mode
+            if hasattr(self, 'editing_lane_idx') and self.editing_lane_idx is not None:
+                lane = LANE_CONFIGS[self.editing_lane_idx]
+                points = lane['poly']
+                
+                # Right-click to delete point
+                if event.button() == Qt.RightButton:
+                    for i, (px, py) in enumerate(points):
+                        dist = ((frame_x - px)**2 + (frame_y - py)**2) ** 0.5
+                        if dist < 15:  # Within 15 pixels
+                            if len(points) <= 3:
+                                QMessageBox.warning(self, "Minimum Points", "Lane must have at least 3 points!")
+                                return
+                            del points[i]
+                            self.update_lists()
+                            print(f"🗑️ Deleted point {i+1} from Lane {self.editing_lane_idx+1}")
+                            return
+                    return
+                
+                # Left-click to start dragging
+                if event.button() == Qt.LeftButton:
+                    for i, (px, py) in enumerate(points):
+                        dist = ((frame_x - px)**2 + (frame_y - py)**2) ** 0.5
+                        if dist < 15:  # Within 15 pixels
+                            self.dragging_lane_point_idx = i
+                            print(f"🖱️ Started dragging point {i+1}")
+                            return
+                    
+                    # If not dragging, treat as potential add point on mouse move
+                    self.dragging_lane_point_idx = None
+                return
+            
+            # Handle ROI editing mode
             if self.roi_editor.is_editing():
                 roi_idx = self.roi_editor.editing_roi_index
                 if roi_idx < len(DIRECTION_ROIS):
@@ -1130,13 +1167,9 @@ class MainWindow(QMainWindow):
     
     def video_mouse_move(self, event):
         """Handle mouse move for dragging points and hover effects"""
-        global DIRECTION_ROIS
+        global DIRECTION_ROIS, LANE_CONFIGS
         
         if self.current_frame is None:
-            return
-        
-        # Only handle if editing
-        if not self.roi_editor.is_editing():
             return
         
         # Get mouse position in frame coordinates
@@ -1158,6 +1191,25 @@ class MainWindow(QMainWindow):
             frame_x = int(mouse_x / scale)
             frame_y = int(mouse_y / scale)
             
+            # Handle lane editing drag
+            if hasattr(self, 'editing_lane_idx') and self.editing_lane_idx is not None:
+                if hasattr(self, 'dragging_lane_point_idx') and self.dragging_lane_point_idx is not None:
+                    lane = LANE_CONFIGS[self.editing_lane_idx]
+                    lane['poly'][self.dragging_lane_point_idx] = [frame_x, frame_y]
+                    if hasattr(self, 'editing_lane_update_func'):
+                        self.editing_lane_update_func()
+                    self.update_lists()
+                return
+            
+            # Handle ROI editing
+            if not self.roi_editor.is_editing():
+                return
+        mouse_y = event.pos().y() - offset_y
+        
+        if 0 <= mouse_x < display_width and 0 <= mouse_y < display_height:
+            frame_x = int(mouse_x / scale)
+            frame_y = int(mouse_y / scale)
+            
             roi_idx = self.roi_editor.editing_roi_index
             if roi_idx < len(DIRECTION_ROIS):
                 points = DIRECTION_ROIS[roi_idx]['points']
@@ -1165,17 +1217,21 @@ class MainWindow(QMainWindow):
     
     def video_mouse_release(self, event):
         """Stop dragging point"""
+        # Stop lane point dragging
+        if hasattr(self, 'dragging_lane_point_idx'):
+            if self.dragging_lane_point_idx is not None:
+                print(f"✅ Finished dragging point {self.dragging_lane_point_idx + 1}")
+            self.dragging_lane_point_idx = None
+        
+        # Stop ROI point dragging
         self.roi_editor.handle_mouse_release()
     
     def video_mouse_double_click(self, event):
-        """Double-click on edge to insert new point"""
-        global DIRECTION_ROIS
+        """Double-click on edge to insert new point, or handle lane editing"""
+        global DIRECTION_ROIS, LANE_CONFIGS
         from PyQt5.QtCore import Qt
         
         if event.button() != Qt.LeftButton:
-            return
-        
-        if not self.roi_editor.is_editing():
             return
         
         if self.current_frame is None:
@@ -1200,11 +1256,76 @@ class MainWindow(QMainWindow):
             frame_x = int(click_x / scale)
             frame_y = int(click_y / scale)
             
-            roi_idx = self.roi_editor.editing_roi_index
-            if roi_idx < len(DIRECTION_ROIS):
-                points = DIRECTION_ROIS[roi_idx]['points']
-                if self.roi_editor.handle_double_click(frame_x, frame_y, points):
-                    self.update_direction_roi_list()
+            # Handle lane editing
+            if hasattr(self, 'editing_lane_idx') and self.editing_lane_idx is not None:
+                lane = LANE_CONFIGS[self.editing_lane_idx]
+                points = lane['poly']
+                
+                # Check if clicked near existing point (drag mode) - within 15 pixels
+                clicked_point_idx = None
+                for i, (px, py) in enumerate(points):
+                    dist = ((frame_x - px)**2 + (frame_y - py)**2) ** 0.5
+                    if dist < 15:
+                        clicked_point_idx = i
+                        break
+                
+                if clicked_point_idx is not None:
+                    # Drag existing point
+                    points[clicked_point_idx] = [frame_x, frame_y]
+                    print(f"🖱️ Dragged point {clicked_point_idx+1} to ({frame_x}, {frame_y})")
+                else:
+                    # Add new point by finding closest edge
+                    min_dist = float('inf')
+                    insert_idx = None
+                    
+                    for i in range(len(points)):
+                        p1 = points[i]
+                        p2 = points[(i + 1) % len(points)]
+                        
+                        # Calculate distance to edge
+                        edge_dist = self._point_to_line_distance(frame_x, frame_y, p1, p2)
+                        if edge_dist < min_dist:
+                            min_dist = edge_dist
+                            insert_idx = i + 1
+                    
+                    if min_dist < 20:  # Only insert if close to an edge
+                        points.insert(insert_idx, [frame_x, frame_y])
+                        print(f"➕ Added new point at ({frame_x}, {frame_y}) after point {insert_idx}")
+                
+                # Update the keypoint list in dialog
+                if hasattr(self, 'editing_lane_update_func'):
+                    self.editing_lane_update_func()
+                self.update_lists()
+                return
+            
+            # Handle direction ROI editing
+            if self.roi_editor.is_editing():
+                roi_idx = self.roi_editor.editing_roi_index
+                if roi_idx < len(DIRECTION_ROIS):
+                    points = DIRECTION_ROIS[roi_idx]['points']
+                    if self.roi_editor.handle_double_click(frame_x, frame_y, points):
+                        pass  # List widget removed
+    
+    def _point_to_line_distance(self, px, py, p1, p2):
+        """Calculate perpendicular distance from point to line segment"""
+        x1, y1 = p1
+        x2, y2 = p2
+        
+        # Vector from p1 to p2
+        dx = x2 - x1
+        dy = y2 - y1
+        
+        if dx == 0 and dy == 0:
+            return ((px - x1)**2 + (py - y1)**2) ** 0.5
+        
+        # Parameter t for projection
+        t = max(0, min(1, ((px - x1) * dx + (py - y1) * dy) / (dx*dx + dy*dy)))
+        
+        # Closest point on segment
+        closest_x = x1 + t * dx
+        closest_y = y1 + t * dy
+        
+        return ((px - closest_x)**2 + (py - closest_y)**2) ** 0.5
         
     def update_image(self, frame):
         global _tmp_lane_pts, _tmp_stop_point, _drawing_mode, _detection_running
@@ -1220,9 +1341,12 @@ class MainWindow(QMainWindow):
         if self.show_direction_rois and self.show_roi_overlays:
             display = self.draw_direction_rois(display)
         
-        # Draw lanes and stop line (if enabled)
-        if self.show_lanes:
+        # Draw lanes (if enabled)
+        if self.show_lanes and self.show_lanes_flag:
             display = self.draw_lanes(display)
+        
+        # Draw stop line (if enabled)
+        if self.show_lanes and self.show_stopline_flag:
             display = self.draw_stop_line(display)
         
         # Draw temporary lane
@@ -1255,62 +1379,65 @@ class MainWindow(QMainWindow):
             cv2.putText(display, "P1", (_tmp_tl_point[0]+8, _tmp_tl_point[1]), 
                        cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 255), 2)
         
-        # Draw reference vector (for direction calibration)
-        if self.ref_vector_p1 is not None and self.ref_vector_p2 is not None:
-            import math
-            p1 = self.ref_vector_p1
-            p2 = self.ref_vector_p2
-            # Draw arrow showing reference direction
-            cv2.arrowedLine(display, p1, p2, (255, 0, 255), 3, tipLength=0.05)
-            # Draw start/end points
-            cv2.circle(display, p1, 6, (255, 0, 255), -1)
-            cv2.circle(display, p2, 6, (255, 0, 255), -1)
-            # Draw label with angle
-            mid = ((p1[0] + p2[0]) // 2, (p1[1] + p2[1]) // 2)
-            dx = p2[0] - p1[0]
-            dy = p2[1] - p1[1]
-            angle = math.degrees(math.atan2(dy, dx))
-            cv2.putText(display, f"REF: {angle:.1f} deg", (mid[0] + 10, mid[1] - 10),
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2, cv2.LINE_AA)
-        elif _drawing_mode == 'ref_vector' and self.ref_vector_p1 is not None:
+        # Draw reference vector (for direction calibration) - check toggle flag
+        if self.show_ref_vector_flag:
+            if self.ref_vector_p1 is not None and self.ref_vector_p2 is not None:
+                import math
+                p1 = self.ref_vector_p1
+                p2 = self.ref_vector_p2
+                # Draw arrow showing reference direction
+                cv2.arrowedLine(display, p1, p2, (255, 0, 255), 3, tipLength=0.05)
+                # Draw start/end points
+                cv2.circle(display, p1, 6, (255, 0, 255), -1)
+                cv2.circle(display, p2, 6, (255, 0, 255), -1)
+                # Draw label with angle
+                mid = ((p1[0] + p2[0]) // 2, (p1[1] + p2[1]) // 2)
+                dx = p2[0] - p1[0]
+                dy = p2[1] - p1[1]
+                angle = math.degrees(math.atan2(dy, dx))
+                cv2.putText(display, f"REF: {angle:.1f} deg", (mid[0] + 10, mid[1] - 10),
+                           cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2, cv2.LINE_AA)
+        # Always show first point when drawing (regardless of toggle)
+        if _drawing_mode == 'ref_vector' and self.ref_vector_p1 is not None:
             # Show first point while waiting for second
             cv2.circle(display, self.ref_vector_p1, 6, (255, 0, 255), -1)
             cv2.putText(display, "Click second point", (self.ref_vector_p1[0] + 10, self.ref_vector_p1[1] - 10),
                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2, cv2.LINE_AA)
         
-        # Overlay ALL TL ROIs and labels
+        # Overlay ALL TL ROIs and labels (if enabled)
         global TL_ROIS
-        for idx, tl_data in enumerate(TL_ROIS):
-            x1, y1, x2, y2, tl_type, current_color = tl_data
-            # Color code by current light color
-            box_color = (128, 128, 128)  # Gray default
-            if current_color == 'đỏ':
-                box_color = (0, 0, 255)  # Red
-                color_display = "DO"
-            elif current_color == 'xanh':
-                box_color = (0, 255, 0)  # Green
-                color_display = "XANH"
-            elif current_color == 'vàng':
-                box_color = (0, 255, 255)  # Yellow
-                color_display = "VANG"
-            else:
-                color_display = "???"
-            
-            # Map tl_type to ASCII for display
-            if tl_type == 'tròn':
-                type_display = "tron"
-            elif tl_type == 'đi thẳng':
-                type_display = "thang"
-            elif tl_type == 'rẽ trái':
-                type_display = "L"
-            elif tl_type == 'rẽ phải':
-                type_display = "R"
-            else:
-                type_display = tl_type
-            
-            cv2.rectangle(display, (x1, y1), (x2, y2), box_color, 2)
-            label_text = f"TL{idx+1}[{type_display}]: {color_display}"
-            cv2.putText(display, label_text, (x1, max(0, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 2, cv2.LINE_AA)
+        if self.show_traffic_lights_flag:
+            for idx, tl_data in enumerate(TL_ROIS):
+                x1, y1, x2, y2, tl_type, current_color = tl_data
+                # Color code by current light color
+                box_color = (128, 128, 128)  # Gray default
+                if current_color == 'đỏ':
+                    box_color = (0, 0, 255)  # Red
+                    color_display = "DO"
+                elif current_color == 'xanh':
+                    box_color = (0, 255, 0)  # Green
+                    color_display = "XANH"
+                elif current_color == 'vàng':
+                    box_color = (0, 255, 255)  # Yellow
+                    color_display = "VANG"
+                else:
+                    color_display = "???"
+                
+                # Map tl_type to ASCII for display
+                if tl_type == 'tròn':
+                    type_display = "tron"
+                elif tl_type == 'đi thẳng':
+                    type_display = "thang"
+                elif tl_type == 'rẽ trái':
+                    type_display = "L"
+                elif tl_type == 'rẽ phải':
+                    type_display = "R"
+                else:
+                    type_display = tl_type
+                
+                cv2.rectangle(display, (x1, y1), (x2, y2), box_color, 2)
+                label_text = f"TL{idx+1}[{type_display}]: {color_display}"
+                cv2.putText(display, label_text, (x1, max(0, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 2, cv2.LINE_AA)
         
         # Convert to QImage
         rgb_image = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
@@ -1342,8 +1469,21 @@ class MainWindow(QMainWindow):
         for idx, lane in enumerate(LANE_CONFIGS, start=1):
             poly = lane["poly"]
             pts = np.array(poly, dtype=np.int32)
-            cv2.fillPoly(overlay, [pts], (0, 255, 255))
-            cv2.polylines(overlay, [pts], isClosed=True, color=(0, 200, 200), thickness=2)
+            
+            # Highlight lane being edited
+            if hasattr(self, 'editing_lane_idx') and self.editing_lane_idx == (idx - 1):
+                # Draw in bright green with thicker outline
+                cv2.fillPoly(overlay, [pts], (0, 255, 0))
+                cv2.polylines(overlay, [pts], isClosed=True, color=(0, 200, 0), thickness=4)
+                # Draw keypoints as circles
+                for px, py in poly:
+                    cv2.circle(overlay, (px, py), 8, (255, 0, 255), -1)
+                    cv2.circle(overlay, (px, py), 8, (255, 255, 255), 2)
+            else:
+                # Normal lane rendering
+                cv2.fillPoly(overlay, [pts], (0, 255, 255))
+                cv2.polylines(overlay, [pts], isClosed=True, color=(0, 200, 200), thickness=2)
+            
             cx = int(sum(p[0] for p in poly) / len(poly))
             cy = int(sum(p[1] for p in poly) / len(poly))
             cv2.putText(overlay, f"L{idx}", (cx-15, cy),
@@ -1420,21 +1560,41 @@ class MainWindow(QMainWindow):
     def keyPressEvent(self, event):
         """Handle keyboard shortcuts for finishing drawings"""
         from PyQt5.QtCore import Qt
-        global _drawing_mode
+        global _drawing_mode, LANE_CONFIGS
         
-        # Enter/Return key to finish drawing
+        # Enter/Return key to finish drawing or editing
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
-            if _drawing_mode == 'lane':
-                # Finish lane drawing
+            # Check if editing lane
+            if hasattr(self, 'editing_lane_idx') and self.editing_lane_idx is not None:
+                self.finish_edit_lane()
+                return
+            # Check if editing ROI
+            elif self.roi_editor.is_editing():
+                self.finish_edit_roi()
+                return
+            # Check drawing modes
+            elif _drawing_mode == 'lane':
                 self.finish_lane()
                 return
             elif _drawing_mode == 'direction_roi':
-                # Finish direction ROI drawing
                 self.finish_direction_roi()
                 return
             elif _drawing_mode == 'ref_vector':
-                # Finish reference vector
                 self.finish_reference_vector()
+                return
+        
+        # Delete key to remove point during lane editing
+        if event.key() == Qt.Key_Delete:
+            if hasattr(self, 'editing_lane_idx') and self.editing_lane_idx is not None:
+                # Find selected point (closest to last mouse position if available)
+                # For now, just show message to use double-click instead
+                QMessageBox.information(
+                    self, 
+                    "Delete Point", 
+                    "To delete a point:\n\n"
+                    "• Right-click directly on the point you want to delete\n"
+                    "• The point must be within 15 pixels of your click"
+                )
                 return
         
         # Call parent class handler for other keys
@@ -1500,11 +1660,52 @@ class MainWindow(QMainWindow):
         self.status_label.setText("Status: Click 2 points for THE stop line")
         
     def delete_lane(self):
+        """Delete selected lane - shows selection dialog"""
         global LANE_CONFIGS
-        selected = self.lane_list.currentRow()
+        if not LANE_CONFIGS:
+            QMessageBox.information(self, "No Lanes", "No lanes to delete!")
+            return
+        
+        # Show selection dialog
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QListWidget, QPushButton, QHBoxLayout
+        
+        selection_dialog = QDialog(self)
+        selection_dialog.setWindowTitle("Select Lane to Delete")
+        sel_layout = QVBoxLayout(selection_dialog)
+        
+        sel_lane_list = QListWidget()
+        for idx, lane in enumerate(LANE_CONFIGS):
+            allowed = lane.get('allowed_labels', ['all'])
+            sel_lane_list.addItem(f"Lane {idx+1}: {len(lane['poly'])} points - {', '.join(allowed)}")
+        
+        sel_layout.addWidget(QLabel("Select a lane to delete:"))
+        sel_layout.addWidget(sel_lane_list)
+        
+        btn_layout = QHBoxLayout()
+        btn_ok = QPushButton("Delete")
+        btn_cancel = QPushButton("Cancel")
+        btn_layout.addWidget(btn_ok)
+        btn_layout.addWidget(btn_cancel)
+        sel_layout.addLayout(btn_layout)
+        
+        btn_cancel.clicked.connect(selection_dialog.reject)
+        
+        def on_ok():
+            sel_idx = sel_lane_list.currentRow()
+            if sel_idx >= 0:
+                selection_dialog.selected_idx = sel_idx
+                selection_dialog.accept()
+            else:
+                QMessageBox.warning(selection_dialog, "No Selection", "Please select a lane!")
+        
+        btn_ok.clicked.connect(on_ok)
+        
+        if selection_dialog.exec_() == QDialog.Rejected:
+            return
+        
+        selected = getattr(selection_dialog, 'selected_idx', -1)
         if selected >= 0 and selected < len(LANE_CONFIGS):
             del LANE_CONFIGS[selected]
-            self.update_lists()
             self.status_label.setText(f"Status: Deleted lane {selected + 1}")
             
     def delete_stopline(self):
@@ -1608,6 +1809,11 @@ class MainWindow(QMainWindow):
         # === EDIT Menu ===
         edit_menu = menubar.addMenu("✏️ &Edit")
         
+        # Edit Lane
+        self.action_edit_lane = QAction("Edit Selected Lane", self)
+        self.action_edit_lane.triggered.connect(self.start_edit_lane)
+        edit_menu.addAction(self.action_edit_lane)
+        
         # Edit direction ROI
         self.action_edit_direction = QAction("Edit Selected Direction ROI", self)
         self.action_edit_direction.setShortcut("E")
@@ -1651,12 +1857,33 @@ class MainWindow(QMainWindow):
         action_delete_tl.triggered.connect(self.delete_tl)
         delete_menu.addAction(action_delete_tl)
         
-        action_delete_direction = QAction("Delete Direction ROI", self)
+        action_delete_direction = QAction("Delete Selected Direction ROI", self)
         action_delete_direction.triggered.connect(self.delete_direction_roi)
         delete_menu.addAction(action_delete_direction)
         
         # === VIEW Menu ===
         view_menu = menubar.addMenu("👁️ &View")
+        
+        # Toggle lanes
+        self.action_toggle_lanes = QAction("Show Lanes", self)
+        self.action_toggle_lanes.setCheckable(True)
+        self.action_toggle_lanes.setChecked(True)
+        self.action_toggle_lanes.triggered.connect(self.toggle_lanes)
+        view_menu.addAction(self.action_toggle_lanes)
+        
+        # Toggle stopline
+        self.action_toggle_stopline = QAction("Show Stop Line", self)
+        self.action_toggle_stopline.setCheckable(True)
+        self.action_toggle_stopline.setChecked(True)
+        self.action_toggle_stopline.triggered.connect(self.toggle_stopline)
+        view_menu.addAction(self.action_toggle_stopline)
+        
+        # Toggle traffic lights
+        self.action_toggle_traffic_lights = QAction("Show Traffic Lights", self)
+        self.action_toggle_traffic_lights.setCheckable(True)
+        self.action_toggle_traffic_lights.setChecked(True)
+        self.action_toggle_traffic_lights.triggered.connect(self.toggle_traffic_lights)
+        view_menu.addAction(self.action_toggle_traffic_lights)
         
         # Toggle direction ROIs
         self.action_toggle_direction_rois = QAction("Show Direction ROIs", self)
@@ -1664,6 +1891,15 @@ class MainWindow(QMainWindow):
         self.action_toggle_direction_rois.setChecked(True)
         self.action_toggle_direction_rois.triggered.connect(self.toggle_direction_rois)
         view_menu.addAction(self.action_toggle_direction_rois)
+        
+        # Toggle reference vector
+        self.action_toggle_ref_vector = QAction("Show Reference Vector", self)
+        self.action_toggle_ref_vector.setCheckable(True)
+        self.action_toggle_ref_vector.setChecked(True)
+        self.action_toggle_ref_vector.triggered.connect(self.toggle_ref_vector)
+        view_menu.addAction(self.action_toggle_ref_vector)
+        
+        view_menu.addSeparator()
         
         # Toggle all boxes
         self.action_toggle_boxes = QAction("Show All Bounding Boxes", self)
@@ -1753,9 +1989,9 @@ class MainWindow(QMainWindow):
         '''Show about dialog'''
         QMessageBox.about(
             self,
-            "About Traffic Violation Detector",
+            "About Traffic Violation by dangdoday",
             "<h2>Traffic Violation Detection System</h2>"
-            "<p>Version 2.0</p>"
+            "<p>Version 2.0 - by dangdoday</p>"
             "<p>Advanced traffic violation detection using YOLOv8</p>"
             "<p><b>Features:</b></p>"
             "<ul>"
@@ -2085,13 +2321,8 @@ class MainWindow(QMainWindow):
             dialog.close()
     
     def update_lists(self):
-        self.lane_list.clear()
-        for idx, lane in enumerate(LANE_CONFIGS, start=1):
-            allowed = lane.get('allowed_labels', ['all'])
-            self.lane_list.addItem(f"Lane {idx}: {len(lane['poly'])} points - {', '.join(allowed)}")
-        
-        # Update direction ROI list
-        self.update_direction_roi_list()
+        """Placeholder - list widgets removed"""
+        pass
             
     def start_detection(self):
         global _detection_running
@@ -2402,9 +2633,6 @@ class MainWindow(QMainWindow):
         _drawing_mode = None
         _tmp_direction_roi_pts = []
         self.btn_finish_direction_roi.setEnabled(False)
-        
-        # Update list
-        self.update_direction_roi_list()
     
     def update_direction_roi_list(self):
         """Update direction ROI list widget"""
@@ -2436,27 +2664,108 @@ class MainWindow(QMainWindow):
                 self.direction_roi_list.addItem(f"{color_mark} ROI {i+1}: {direction_upper} ({len(roi['points'])} pts)")
     
     def delete_direction_roi(self):
-        """Delete selected direction ROI"""
+        """Delete selected direction ROI - shows selection dialog"""
         global DIRECTION_ROIS
         
-        selected_idx = self.direction_roi_list.currentRow()
-        if selected_idx < 0:
-            QMessageBox.warning(self, "No Selection", "Please select a Direction ROI to delete.")
+        if not DIRECTION_ROIS:
+            QMessageBox.information(self, "No ROIs", "No direction ROIs to delete!")
             return
         
-        deleted_roi = DIRECTION_ROIS.pop(selected_idx)
-        print(f"🗑️ Deleted Direction ROI: {deleted_roi['name']} ({deleted_roi['direction']})")
-        self.status_label.setText(f"Status: Deleted {deleted_roi['direction'].upper()} ROI")
+        # Show selection dialog
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QListWidget, QPushButton, QHBoxLayout
         
-        self.update_direction_roi_list()
+        selection_dialog = QDialog(self)
+        selection_dialog.setWindowTitle("Select Direction ROI to Delete")
+        sel_layout = QVBoxLayout(selection_dialog)
+        
+        sel_roi_list = QListWidget()
+        for idx, roi in enumerate(DIRECTION_ROIS):
+            primary_dir = roi.get('primary_direction', roi.get('direction', 'unknown')).upper()
+            allowed = roi.get('allowed_directions', [primary_dir.lower()])
+            allowed_str = '+'.join([d.upper() for d in allowed])
+            sel_roi_list.addItem(f"ROI {idx+1}: {allowed_str} - {len(roi['points'])} points")
+        
+        sel_layout.addWidget(QLabel("Select a direction ROI to delete:"))
+        sel_layout.addWidget(sel_roi_list)
+        
+        btn_layout = QHBoxLayout()
+        btn_ok = QPushButton("Delete")
+        btn_cancel = QPushButton("Cancel")
+        btn_layout.addWidget(btn_ok)
+        btn_layout.addWidget(btn_cancel)
+        sel_layout.addLayout(btn_layout)
+        
+        btn_cancel.clicked.connect(selection_dialog.reject)
+        
+        def on_ok():
+            sel_idx = sel_roi_list.currentRow()
+            if sel_idx >= 0:
+                selection_dialog.selected_idx = sel_idx
+                selection_dialog.accept()
+            else:
+                QMessageBox.warning(selection_dialog, "No Selection", "Please select a direction ROI!")
+        
+        btn_ok.clicked.connect(on_ok)
+        
+        if selection_dialog.exec_() == QDialog.Rejected:
+            return
+        
+        selected_idx = getattr(selection_dialog, 'selected_idx', -1)
+        if selected_idx >= 0 and selected_idx < len(DIRECTION_ROIS):
+            deleted_roi = DIRECTION_ROIS.pop(selected_idx)
+            print(f"🗑️ Deleted Direction ROI {selected_idx+1}")
+            self.status_label.setText(f"Status: Deleted Direction ROI {selected_idx+1}")
     
     def start_edit_direction_roi(self):
-        """Start editing selected direction ROI"""
+        """Start editing selected direction ROI - always shows selection dialog"""
         global DIRECTION_ROIS
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QListWidget, QPushButton, QHBoxLayout
         
-        selected_idx = self.direction_roi_list.currentRow()
+        # Check if ROIs exist
+        if not DIRECTION_ROIS:
+            QMessageBox.information(self, "No ROIs", "No direction ROIs configured yet. Please add ROIs first.")
+            return
+        
+        # Always show selection dialog
+        selection_dialog = QDialog(self)
+        selection_dialog.setWindowTitle("Select Direction ROI to Edit")
+        selection_dialog.setMinimumSize(400, 300)
+        sel_layout = QVBoxLayout(selection_dialog)
+        
+        sel_layout.addWidget(QLabel("<b>Select a direction ROI to edit:</b>"))
+        sel_roi_list = QListWidget()
+        for idx, roi in enumerate(DIRECTION_ROIS, start=1):
+            primary_dir = roi.get('primary_direction', roi.get('direction', 'unknown')).upper()
+            allowed = roi.get('allowed_directions', [primary_dir.lower()])
+            allowed_str = '+'.join([d.upper() for d in allowed])
+            points = roi.get('points', [])
+            sel_roi_list.addItem(f"ROI {idx}: {allowed_str} - {len(points)} points")
+        sel_layout.addWidget(sel_roi_list)
+        
+        btn_layout = QHBoxLayout()
+        btn_ok = QPushButton("Edit")
+        btn_cancel = QPushButton("Cancel")
+        btn_layout.addWidget(btn_ok)
+        btn_layout.addWidget(btn_cancel)
+        sel_layout.addLayout(btn_layout)
+        
+        btn_cancel.clicked.connect(selection_dialog.reject)
+        
+        def on_ok():
+            sel_idx = sel_roi_list.currentRow()
+            if sel_idx >= 0:
+                selection_dialog.selected_idx = sel_idx
+                selection_dialog.accept()
+            else:
+                QMessageBox.warning(selection_dialog, "No Selection", "Please select a ROI!")
+        
+        btn_ok.clicked.connect(on_ok)
+        
+        if selection_dialog.exec_() == QDialog.Rejected:
+            return
+        
+        selected_idx = getattr(selection_dialog, 'selected_idx', -1)
         if selected_idx < 0:
-            QMessageBox.warning(self, "No Selection", "Please select a Direction ROI to edit.")
             return
         
         # Start editing mode
@@ -2489,9 +2798,11 @@ class MainWindow(QMainWindow):
         print(f"   Use 'Change ROI Directions' to modify allowed directions")
     
     def finish_edit_roi(self):
-        """Finish editing current ROI"""
+        """Finish editing current ROI and show direction selection dialog"""
         if not self.roi_editor.is_editing():
             return
+        
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QCheckBox, QDialogButtonBox, QLabel, QRadioButton, QButtonGroup
         
         roi_idx = self.roi_editor.editing_roi_index
         roi = DIRECTION_ROIS[roi_idx]
@@ -2512,11 +2823,93 @@ class MainWindow(QMainWindow):
         self.action_smooth_roi.setEnabled(False)
         self.action_change_directions.setEnabled(False)
         
-        dir_display = roi.get('primary_direction', roi.get('direction', 'unknown')).upper()
-        self.status_label.setText(f"Status: Finished editing {dir_display} ROI - {len(roi['points'])} points")
-        print(f"✅ Finished editing ROI {roi_idx}: {len(roi['points'])} points")
+        # Show direction selection dialog
+        current_allowed = roi.get('allowed_directions', [roi.get('direction', 'straight')])
+        current_primary = roi.get('primary_direction', roi.get('direction', 'straight'))
         
-        self.update_direction_roi_list()
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Configure ROI {roi_idx + 1}")
+        layout = QVBoxLayout()
+        
+        layout.addWidget(QLabel("<b>Chọn các hướng đi được phép:</b>"))
+        
+        check_left = QCheckBox("⬅️ Rẽ trái (Left Turn)")
+        check_straight = QCheckBox("⬆️ Đi thẳng (Straight)")
+        check_right = QCheckBox("➡️ Rẽ phải (Right Turn)")
+        
+        # Set current values
+        check_left.setChecked('left' in current_allowed)
+        check_straight.setChecked('straight' in current_allowed)
+        check_right.setChecked('right' in current_allowed)
+        
+        layout.addWidget(check_left)
+        layout.addWidget(check_straight)
+        layout.addWidget(check_right)
+        
+        layout.addWidget(QLabel("<br><b>Hướng chính</b> (Primary - for display color):"))
+        
+        primary_group = QButtonGroup(dialog)
+        radio_left = QRadioButton("⬅️ Left (Red 🔴)")
+        radio_straight = QRadioButton("⬆️ Straight (Green 🟢)")
+        radio_right = QRadioButton("➡️ Right (Yellow 🟡)")
+        primary_group.addButton(radio_left)
+        primary_group.addButton(radio_straight)
+        primary_group.addButton(radio_right)
+        
+        if current_primary == 'left':
+            radio_left.setChecked(True)
+        elif current_primary == 'straight':
+            radio_straight.setChecked(True)
+        elif current_primary == 'right':
+            radio_right.setChecked(True)
+        
+        layout.addWidget(radio_left)
+        layout.addWidget(radio_straight)
+        layout.addWidget(radio_right)
+        
+        buttons = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        buttons.accepted.connect(dialog.accept)
+        buttons.rejected.connect(dialog.reject)
+        layout.addWidget(buttons)
+        
+        dialog.setLayout(layout)
+        
+        if dialog.exec_() == QDialog.Accepted:
+            # Get new settings
+            new_allowed = []
+            if check_left.isChecked():
+                new_allowed.append('left')
+            if check_straight.isChecked():
+                new_allowed.append('straight')
+            if check_right.isChecked():
+                new_allowed.append('right')
+            
+            if not new_allowed:
+                QMessageBox.warning(self, "No Direction", "Phải chọn ít nhất 1 hướng!")
+                new_allowed = ['straight']  # Default to straight
+            
+            # Get new primary
+            if radio_left.isChecked():
+                new_primary = 'left'
+            elif radio_straight.isChecked():
+                new_primary = 'straight'
+            elif radio_right.isChecked():
+                new_primary = 'right'
+            else:
+                new_primary = new_allowed[0]
+            
+            # Update ROI
+            roi['allowed_directions'] = new_allowed
+            roi['primary_direction'] = new_primary
+            roi['direction'] = new_primary  # Backward compat
+            
+            allowed_str = '+'.join([d.upper() for d in new_allowed])
+            print(f"✅ Finished editing ROI {roi_idx + 1}: {allowed_str} (primary: {new_primary.upper()})")
+            self.status_label.setText(f"Status: ROI {roi_idx + 1} - {allowed_str}")
+        else:
+            dir_display = roi.get('primary_direction', roi.get('direction', 'unknown')).upper()
+            self.status_label.setText(f"Status: Finished editing {dir_display} ROI - {len(roi['points'])} points")
+            print(f"✅ Finished editing ROI {roi_idx}: {len(roi['points'])} points")
     
     def smooth_current_roi(self):
         """Smooth the currently editing ROI"""
@@ -2548,8 +2941,6 @@ class MainWindow(QMainWindow):
         new_count = len(roi['points'])
         self.status_label.setText(f"Status: Smoothed ROI - {old_count} → {new_count} points")
         print(f"🔧 Smoothed ROI: {old_count} → {new_count} points (epsilon={epsilon})")
-        
-        self.update_direction_roi_list()
     
     def change_roi_directions(self):
         """Change allowed directions for currently editing ROI"""
@@ -2648,8 +3039,6 @@ class MainWindow(QMainWindow):
         allowed_str = '+'.join([d.upper() for d in new_allowed])
         print(f"🔄 Changed ROI {roi_idx + 1} directions: {allowed_str} (primary: {new_primary.upper()})")
         self.status_label.setText(f"Status: ROI {roi_idx + 1} - Allowed: {allowed_str}")
-        
-        self.update_direction_roi_list()
     
     def save_direction_rois(self):
         """Save direction ROIs to JSON file"""
@@ -2706,7 +3095,6 @@ class MainWindow(QMainWindow):
                 
                 print(f"📂 Loaded {len(DIRECTION_ROIS)} Direction ROIs from: {file_path}")
                 self.status_label.setText(f"Status: Loaded {len(DIRECTION_ROIS)} ROIs")
-                self.update_direction_roi_list()
                 
                 QMessageBox.information(self, "Loaded", f"Loaded {len(DIRECTION_ROIS)} Direction ROIs successfully!")
                 
@@ -2894,8 +3282,6 @@ class MainWindow(QMainWindow):
             TL_ROIS.clear()
             LANE_CONFIGS.clear()
             DIRECTION_ROIS.clear()
-            self.lane_list.clear()
-            self.direction_roi_list.clear()
             self.ref_vector_p1 = None
             self.ref_vector_p2 = None
             self.ref_vector_label.setText("Ref Vector: Not set")
@@ -3039,37 +3425,57 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "No Video", "Please load a video first before saving configuration.")
             return
         
-        # Convert reference vector to tuple format if set
-        ref_vector = None
-        if self.ref_vector_p1 and self.ref_vector_p2:
-            ref_vector = (tuple(self.ref_vector_p1), tuple(self.ref_vector_p2))
-        
-        # Save using ConfigManager
-        success = self.config_manager.save_config(
-            video_path=self.video_path,
-            lane_configs=LANE_CONFIGS,
-            stop_line=STOP_LINE,
-            tl_rois=TL_ROIS,
-            direction_rois=DIRECTION_ROIS,
-            reference_vector=ref_vector
-        )
-        
-        if success:
-            config_path = self.config_manager.get_config_path(self.video_path)
-            QMessageBox.information(
-                self, 
-                "Configuration Saved", 
-                f"✅ All ROIs saved successfully!\n\nFile: {config_path.name}\n\n"
-                f"- Lanes: {len(LANE_CONFIGS)}\n"
-                f"- Stopline: {'Yes' if STOP_LINE else 'No'}\n"
-                f"- Traffic Lights: {len(TL_ROIS)}\n"
-                f"- Direction Zones: {len(DIRECTION_ROIS)}\n"
-                f"- Reference Vector: {'Yes' if ref_vector else 'No'}"
+        try:
+            # Convert reference vector to tuple format if set
+            ref_vector = None
+            if self.ref_vector_p1 and self.ref_vector_p2:
+                ref_vector = (tuple(self.ref_vector_p1), tuple(self.ref_vector_p2))
+            
+            # Debug print
+            print(f"🔍 Saving config for video: {self.video_path}")
+            print(f"  - Lanes: {len(LANE_CONFIGS)}")
+            print(f"  - Stopline: {STOP_LINE}")
+            print(f"  - Traffic Lights: {len(TL_ROIS)}")
+            print(f"  - Direction ROIs: {len(DIRECTION_ROIS)}")
+            print(f"  - Ref Vector: {ref_vector}")
+            
+            # Save using ConfigManager
+            success = self.config_manager.save_config(
+                video_path=self.video_path,
+                lane_configs=LANE_CONFIGS,
+                stop_line=STOP_LINE,
+                tl_rois=TL_ROIS,
+                direction_rois=DIRECTION_ROIS,
+                reference_vector=ref_vector
             )
-            self.config_status_label.setText(f"✅ Config: Saved to file")
-            self.config_status_label.setStyleSheet("QLabel { color: green; font-weight: bold; }")
-        else:
-            QMessageBox.critical(self, "Save Failed", "❌ Failed to save configuration. Check console for errors.")
+            
+            if success:
+                config_path = self.config_manager.get_config_path(self.video_path)
+                QMessageBox.information(
+                    self, 
+                    "Configuration Saved", 
+                    f"✅ All ROIs saved successfully!\n\nFile: {config_path.name}\n\n"
+                    f"- Lanes: {len(LANE_CONFIGS)}\n"
+                    f"- Stopline: {'Yes' if STOP_LINE else 'No'}\n"
+                    f"- Traffic Lights: {len(TL_ROIS)}\n"
+                    f"- Direction Zones: {len(DIRECTION_ROIS)}\n"
+                    f"- Reference Vector: {'Yes' if ref_vector else 'No'}"
+                )
+                self.config_status_label.setText(f"✅ Config: Saved to file")
+                self.config_status_label.setStyleSheet("QLabel { color: green; font-weight: bold; }")
+            else:
+                QMessageBox.critical(self, "Save Failed", "❌ Failed to save configuration. Check console for errors.")
+        
+        except Exception as e:
+            import traceback
+            error_details = traceback.format_exc()
+            print(f"❌ Error saving configuration:")
+            print(error_details)
+            QMessageBox.critical(
+                self, 
+                "Save Error", 
+                f"❌ An error occurred while saving:\n\n{str(e)}\n\nCheck console for details."
+            )
     
     def load_configuration(self):
         """Manually load configuration from file"""
@@ -3122,17 +3528,14 @@ class MainWindow(QMainWindow):
         # Load lanes
         LANE_CONFIGS.clear()
         for lane_data in config['lanes']:
+            # Support both 'poly' and 'points' keys for backward compatibility
+            points = lane_data.get('poly', lane_data.get('points', []))
             LANE_CONFIGS.append({
-                'poly': lane_data['points'],
-                'points': lane_data['points'],
+                'poly': points,
                 'label': lane_data.get('label', 'Unnamed Lane'),
-                'allowed_types': lane_data.get('allowed_types', [])
+                'allowed_types': lane_data.get('allowed_types', []),
+                'allowed_labels': lane_data.get('allowed_labels', ['all'])
             })
-        
-        # Update lane list widget
-        self.lane_list.clear()
-        for lane in LANE_CONFIGS:
-            self.lane_list.addItem(lane.get('label', 'Unnamed Lane'))
         
         # Load stopline
         STOP_LINE = config['stopline']
@@ -3149,9 +3552,6 @@ class MainWindow(QMainWindow):
         # Load direction zones
         DIRECTION_ROIS.clear()
         DIRECTION_ROIS.extend(config['direction_zones'])
-        
-        # Update direction ROI list widget
-        self.update_direction_roi_list()
         
         # Load reference vector
         if config['reference_vector']:
@@ -3180,6 +3580,202 @@ class MainWindow(QMainWindow):
                 print("   → Recommend: Set Reference Vector before starting detection")
         
         print(f"✅ Configuration applied to UI and global variables")
+    
+    # ========================================================================
+    # View Toggle Methods
+    # ========================================================================
+    
+    def toggle_lanes(self):
+        """Toggle showing lanes"""
+        self.show_lanes_flag = self.action_toggle_lanes.isChecked()
+        self.show_lanes = self.show_lanes_flag
+        print(f"{'👁️' if self.show_lanes_flag else '🙈'} Lanes: {'ON' if self.show_lanes_flag else 'OFF'}")
+    
+    def toggle_stopline(self):
+        """Toggle showing stopline"""
+        self.show_stopline_flag = self.action_toggle_stopline.isChecked()
+        print(f"{'👁️' if self.show_stopline_flag else '🙈'} Stopline: {'ON' if self.show_stopline_flag else 'OFF'}")
+    
+    def toggle_traffic_lights(self):
+        """Toggle showing traffic lights"""
+        self.show_traffic_lights_flag = self.action_toggle_traffic_lights.isChecked()
+        print(f"{'👁️' if self.show_traffic_lights_flag else '🙈'} Traffic Lights: {'ON' if self.show_traffic_lights_flag else 'OFF'}")
+    
+    def toggle_ref_vector(self):
+        """Toggle showing reference vector"""
+        self.show_ref_vector_flag = self.action_toggle_ref_vector.isChecked()
+        print(f"{'👁️' if self.show_ref_vector_flag else '🙈'} Reference Vector: {'ON' if self.show_ref_vector_flag else 'OFF'}")
+    
+    # ========================================================================
+    # Edit Lane Method
+    # ========================================================================
+    
+    def start_edit_lane(self):
+        """Start interactive lane editing - drag/add/delete keypoints, then configure settings"""
+        global LANE_CONFIGS
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QListWidget, QPushButton, QHBoxLayout
+        
+        # Check if lanes exist
+        if not LANE_CONFIGS:
+            QMessageBox.information(self, "No Lanes", "No lanes configured yet. Please add lanes first.")
+            return
+        
+        # Always show selection dialog
+        selection_dialog = QDialog(self)
+        selection_dialog.setWindowTitle("Select Lane to Edit")
+        selection_dialog.setMinimumSize(400, 300)
+        sel_layout = QVBoxLayout(selection_dialog)
+        
+        sel_layout.addWidget(QLabel("<b>Select a lane to edit:</b>"))
+        sel_lane_list = QListWidget()
+        for idx, lane in enumerate(LANE_CONFIGS, start=1):
+            allowed = lane.get('allowed_labels', ['all'])
+            points = lane.get('poly', [])
+            sel_lane_list.addItem(f"Lane {idx}: {len(points)} points - Allowed: {', '.join(allowed)}")
+        sel_layout.addWidget(sel_lane_list)
+        
+        btn_layout = QHBoxLayout()
+        btn_ok = QPushButton("Edit")
+        btn_cancel = QPushButton("Cancel")
+        btn_layout.addWidget(btn_ok)
+        btn_layout.addWidget(btn_cancel)
+        sel_layout.addLayout(btn_layout)
+        
+        btn_cancel.clicked.connect(selection_dialog.reject)
+        
+        def on_ok():
+            sel_idx = sel_lane_list.currentRow()
+            if sel_idx >= 0:
+                selection_dialog.selected_idx = sel_idx
+                selection_dialog.accept()
+            else:
+                QMessageBox.warning(selection_dialog, "No Selection", "Please select a lane!")
+        
+        btn_ok.clicked.connect(on_ok)
+        
+        if selection_dialog.exec_() == QDialog.Rejected:
+            return
+        
+        selected = getattr(selection_dialog, 'selected_idx', -1)
+        if selected < 0:
+            return
+        
+        # Enter interactive editing mode (like ROI editor)
+        self.editing_lane_idx = selected
+        self.dragging_lane_point_idx = None
+        
+        lane = LANE_CONFIGS[selected]
+        
+        # Update UI buttons
+        self.btn_finish_edit_lane = QPushButton("Finish Lane Edit (Enter)")
+        self.btn_finish_edit_lane.clicked.connect(self.finish_edit_lane)
+        
+        # Add finish button to control panel if not already there
+        if hasattr(self, 'control_layout'):
+            self.control_layout.addWidget(self.btn_finish_edit_lane)
+        
+        # Update status
+        self.status_label.setText(
+            f"Status: Editing Lane {selected+1} - {len(lane['poly'])} points | "
+            f"Left-click+drag=move | Double-click=add | Delete key=remove selected | Press 'Finish' or Enter when done"
+        )
+        
+        print(f"✏️ Editing Lane {selected+1}: ({len(lane['poly'])} points)")
+        print(f"   Left-click and drag to move points")
+        print(f"   Double-click near edge to add new point")
+        print(f"   Click a point then press Delete key to remove")
+        print(f"   Press 'Finish Lane Edit' button or Enter when done")
+    
+    def finish_edit_lane(self):
+        """Finish lane editing and show vehicle type selection dialog"""
+        if self.editing_lane_idx is None:
+            return
+        
+        from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QCheckBox, QPushButton, QHBoxLayout
+        
+        selected = self.editing_lane_idx
+        lane = LANE_CONFIGS[selected]
+        
+        # Remove finish button from control panel
+        if hasattr(self, 'btn_finish_edit_lane'):
+            self.btn_finish_edit_lane.deleteLater()
+            del self.btn_finish_edit_lane
+        
+        # Stop editing mode
+        self.editing_lane_idx = None
+        self.dragging_lane_point_idx = None
+        
+        # Show vehicle type selection dialog
+        dialog = QDialog(self)
+        dialog.setWindowTitle(f"Configure Lane {selected + 1}")
+        dialog.setMinimumSize(350, 250)
+        layout = QVBoxLayout(dialog)
+        
+        layout.addWidget(QLabel("<b>Select Allowed Vehicle Types:</b>"))
+        
+        allowed = lane.get('allowed_labels', ['all'])
+        
+        check_all = QCheckBox("All vehicles")
+        check_all.setChecked('all' in allowed)
+        layout.addWidget(check_all)
+        
+        check_xe_may = QCheckBox("Xe máy")
+        check_xe_may.setChecked('xe may' in allowed)
+        layout.addWidget(check_xe_may)
+        
+        check_o_to = QCheckBox("Ô tô")
+        check_o_to.setChecked('o to' in allowed)
+        layout.addWidget(check_o_to)
+        
+        check_xe_bus = QCheckBox("Xe bus")
+        check_xe_bus.setChecked('xe bus' in allowed)
+        layout.addWidget(check_xe_bus)
+        
+        check_xe_tai = QCheckBox("Xe tải")
+        check_xe_tai.setChecked('xe tai' in allowed)
+        layout.addWidget(check_xe_tai)
+        
+        # Save/Cancel buttons
+        button_box = QHBoxLayout()
+        btn_save = QPushButton("Save Changes")
+        btn_cancel = QPushButton("Cancel")
+        button_box.addWidget(btn_save)
+        button_box.addWidget(btn_cancel)
+        layout.addLayout(button_box)
+        
+        def save_changes():
+            new_allowed = []
+            if check_all.isChecked():
+                new_allowed = ['all']
+            else:
+                if check_xe_may.isChecked():
+                    new_allowed.append('xe may')
+                if check_o_to.isChecked():
+                    new_allowed.append('o to')
+                if check_xe_bus.isChecked():
+                    new_allowed.append('xe bus')
+                if check_xe_tai.isChecked():
+                    new_allowed.append('xe tai')
+            
+            if not new_allowed:
+                QMessageBox.warning(dialog, "No Selection", "Please select at least one vehicle type or 'All'")
+                return
+            
+            lane['allowed_labels'] = new_allowed
+            self.update_lists()
+            print(f"✅ Lane {selected + 1} configured: Allowed vehicles = {new_allowed}")
+            dialog.accept()
+        
+        def cancel_changes():
+            dialog.reject()
+        
+        btn_save.clicked.connect(save_changes)
+        btn_cancel.clicked.connect(cancel_changes)
+        
+        # Update status
+        self.status_label.setText("Status: Ready")
+        
+        dialog.exec_()
     
     def show_error(self, error_msg):
         self.status_label.setText(f"Status: Error - {error_msg}")

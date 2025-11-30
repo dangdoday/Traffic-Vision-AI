@@ -295,23 +295,26 @@ class VideoThread(QThread):
             
             # Draw vehicle (respect _show_all_boxes flag)
             is_violator = self.violation_detector.is_violator(track_id)
+            is_lane_violator = track_id in self.violation_detector.lane_violators
+            is_tl_violator = track_id in self.violation_detector.red_light_violators
             
-            # ⚠️ CRITICAL: Only show RED box if vehicle is violator AND has passed stopline
+            # ⚠️ UPDATED: Show lane violations immediately, TL violations only after stopline
             has_passed_stopline = track_id in PASSED_VEHICLES
-            show_as_violator = is_violator and has_passed_stopline
+            show_as_violator = is_lane_violator or (is_tl_violator and has_passed_stopline)
             
             # Get real-time _show_all_boxes value via lambda function
             get_show_all_boxes = self.globals_ref.get('get_show_all_boxes')
             _show_all_boxes = get_show_all_boxes() if get_show_all_boxes else True
             
-            # Only draw if: _show_all_boxes=True OR vehicle is violator (and passed)
+            # Only draw if: _show_all_boxes=True OR vehicle is violator
             if _show_all_boxes or show_as_violator:
                 box_color = (0, 0, 255) if show_as_violator else (0, 255, 0)
                 cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
                 
                 label_text = f"{vehicle_label} ID:{track_id}"
                 if show_as_violator:
-                    label_text += " [VIOLATOR]"
+                    violation_type = "LANE" if is_lane_violator else "RED LIGHT"
+                    label_text += f" [{violation_type}]"
                 
                 cv2.putText(frame, label_text, (x1, y1-5),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 2)

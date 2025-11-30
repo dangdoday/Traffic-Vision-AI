@@ -5,10 +5,6 @@
     {
       "points": [
         [
-          545,
-          440
-        ],
-        [
           935,
           455
         ],
@@ -30,13 +26,18 @@
         "o to",
         "xe bus",
         "xe tai"
+      ],
+      "allowed_labels": [
+        "o to",
+        "xe bus",
+        "xe tai"
       ]
     },
     {
       "points": [
         [
-          952,
-          457
+          939,
+          453
         ],
         [
           1053,
@@ -51,8 +52,8 @@
           465
         ],
         [
-          961,
-          455
+          993,
+          461
         ]
       ],
       "label": "Unnamed Lane",
@@ -60,13 +61,16 @@
         "o to",
         "xe bus",
         "xe may"
+      ],
+      "allowed_labels": [
+        "all"
       ]
     },
     {
       "points": [
         [
-          1160,
-          472
+          1198,
+          461
         ],
         [
           1321,
@@ -88,6 +92,9 @@
       "label": "Unnamed Lane",
       "allowed_types": [
         "xe dap",
+        "xe may"
+      ],
+      "allowed_labels": [
         "xe may"
       ]
     }
