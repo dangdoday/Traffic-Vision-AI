@@ -81,12 +81,21 @@ _hover_edge_indices = None  # (point1_idx, point2_idx) of edge being hovered for
 VEHICLE_POSITIONS = {}  # {track_id: [(x, y, timestamp), ...]} - last N positions for direction calc
 VEHICLE_DIRECTIONS = {}  # {track_id: 'straight', 'left', 'right', 'unknown'}
 
-# ============================================================================
-# WRAPPER FUNCTIONS - Redirect to modular implementations
-# ============================================================================
 def tl_pixel_state(roi):
-    """Wrapper for traffic light classification"""
-    return tl_pixel_state_util(roi)
+    if roi is None or roi.size == 0:
+        return 'unknown'
+    hsv = cv2.cvtColor(cv2.resize(roi, (32, 32)), cv2.COLOR_BGR2HSV)
+    red1 = cv2.inRange(hsv, (0, 100, 80), (10, 255, 255))
+    red2 = cv2.inRange(hsv, (160, 100, 80), (180, 255, 255))
+    yellow = cv2.inRange(hsv, (15, 100, 80), (35, 255, 255))
+    green = cv2.inRange(hsv, (40, 100, 80), (90, 255, 255))
+    r = (red1.mean() + red2.mean()) / 510.0
+    y = yellow.mean() / 255.0
+    g = green.mean() / 255.0
+    m = max(r, y, g)
+    if m < 0.02:
+        return 'unknown'
+    return 'den_do' if r == m else ('den_vang' if y == m else 'den_xanh')
 
 # Global variables
 LANE_CONFIGS = []
@@ -108,12 +117,45 @@ CAR_COUNT = set()  # Track cars/trucks/buses (ô tô, xe tải, xe bus)
 VEHICLE_CLASSES = {0: "o to", 1: "xe bus", 2: "xe dap", 3: "xe may", 4: "xe tai"}  # Custom model classes
 ALLOWED_VEHICLE_IDS = [0, 1, 2, 3, 4]
 
+# =========================================
+# 0. HÀM PHÂN LOẠI MÀU ĐÈN GIAO THÔNG
+# =========================================
 def classify_tl_color(roi):
-    """Wrapper for traffic light color classification"""
-    result = classify_tl_color_util(roi)
-    # Map Vietnamese to English for compatibility
-    mapping = {'đỏ': 'red', 'vàng': 'yellow', 'xanh': 'green', 'unknown': 'unknown'}
-    return mapping.get(result, result)
+    if roi is None or roi.size == 0:
+        return "unknown"
+
+    roi = cv2.resize(roi, (20, 60))
+    hsv = cv2.cvtColor(roi, cv2.COLOR_BGR2HSV)
+
+    lower_red1 = np.array([0, 100, 80])
+    upper_red1 = np.array([10, 255, 255])
+    lower_red2 = np.array([160, 100, 80])
+    upper_red2 = np.array([180, 255, 255])
+
+    lower_yellow = np.array([15, 100, 80])
+    upper_yellow = np.array([35, 255, 255])
+
+    lower_green = np.array([40, 100, 80])
+    upper_green = np.array([90, 255, 255])
+
+    mask_red = cv2.inRange(hsv, lower_red1, upper_red1) | \
+               cv2.inRange(hsv, lower_red2, upper_red2)
+    mask_yel = cv2.inRange(hsv, lower_yellow, upper_yellow)
+    mask_grn = cv2.inRange(hsv, lower_green, upper_green)
+
+    red_ratio = mask_red.mean() / 255.0
+    yellow_ratio = mask_yel.mean() / 255.0
+    green_ratio = mask_grn.mean() / 255.0
+
+    if max(red_ratio, yellow_ratio, green_ratio) < 0.02:
+        return "unknown"
+
+    if red_ratio == max(red_ratio, yellow_ratio, green_ratio):
+        return "red"
+    elif yellow_ratio == max(red_ratio, yellow_ratio, green_ratio):
+        return "yellow"
+    else:
+        return "green"
 
 def point_in_polygon(point, poly):
     x, y = point
@@ -148,9 +190,10 @@ def calculate_vehicle_direction(track_id, current_pos, ref_angle=None):
         ref_angle: Reference angle in degrees for straight direction (default: 90° = downward)
                    If camera is tilted, use the angle of straight lane direction
     
-def point_in_polygon(point, poly):
-    """Wrapper for point in polygon check"""
-    return point_in_poly_util(point, poly)
+    Returns:
+        'straight', 'left', 'right', or 'unknown'
+    """
+    global VEHICLE_POSITIONS
     import math
     
     if track_id not in VEHICLE_POSITIONS:
@@ -240,7 +283,7 @@ def estimate_vehicle_speed(track_id, fps=30, pixel_to_meter=0.05):
     Args:
         track_id: Vehicle tracking ID
         fps: Video frame rate (default 30)
-        pixel_to_meter: Calibration factor (default 0.05m per pixel)
+        pixel_to_meter: Calibration factor (default 0.05 meters per pixel)
     
     Returns:
         speed_kmh: Speed in km/h or None
@@ -3097,6 +3140,11 @@ class MainWindow(QMainWindow):
         # Load traffic lights
         TL_ROIS.clear()
         TL_ROIS.extend(config['traffic_lights'])
+        
+        # ⚠️ CRITICAL: Enable TL color tracking if TL ROIs exist
+        if TL_ROIS:
+            self.tl_tracking_active = True
+            print(f"🚦 HSV color tracking enabled for {len(TL_ROIS)} traffic lights")
         
         # Load direction zones
         DIRECTION_ROIS.clear()
