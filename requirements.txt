@@ -1,0 +1,16 @@
+# Traffic Violation by dangdoday - Requirements
+
+# Core dependencies
+opencv-python>=4.8.0
+numpy>=1.24.0
+ultralytics>=8.0.0
+PyQt5>=5.15.0
+
+# Image processing
+matplotlib>=3.7.0
+scikit-image>=0.21.0
+pillow>=10.0.0
+
+# Optional but recommended
+# torch>=2.0.0  # For GPU acceleration with CUDA
+# torchvision>=0.15.0
