@@ -1,0 +1,156 @@
+{
+  "video_name": "sample_traffic_video.mp4",
+  "video_path": "D:/test/sample_traffic_video.mp4",
+  "lanes": [
+    {
+      "points": [
+        [
+          100,
+          200
+        ],
+        [
+          300,
+          200
+        ],
+        [
+          350,
+          400
+        ],
+        [
+          50,
+          400
+        ]
+      ],
+      "label": "Lane 1 - Main",
+      "allowed_types": [
+        "car",
+        "motorcycle"
+      ]
+    },
+    {
+      "points": [
+        [
+          350,
+          200
+        ],
+        [
+          550,
+          200
+        ],
+        [
+          600,
+          400
+        ],
+        [
+          350,
+          400
+        ]
+      ],
+      "label": "Lane 2 - Turn",
+      "allowed_types": [
+        "car"
+      ]
+    }
+  ],
+  "stopline": {
+    "p1": [
+      100,
+      250
+    ],
+    "p2": [
+      600,
+      250
+    ]
+  },
+  "traffic_lights": [
+    {
+      "x1": 50,
+      "y1": 50,
+      "x2": 100,
+      "y2": 150,
+      "type": "đi thẳng",
+      "color": "xanh"
+    },
+    {
+      "x1": 120,
+      "y1": 50,
+      "x2": 170,
+      "y2": 150,
+      "type": "rẽ trái",
+      "color": "đỏ"
+    },
+    {
+      "x1": 190,
+      "y1": 50,
+      "x2": 240,
+      "y2": 150,
+      "type": "tròn",
+      "color": "vàng"
+    }
+  ],
+  "direction_zones": [
+    {
+      "name": "Zone 1 - Straight",
+      "points": [
+        [
+          200,
+          300
+        ],
+        [
+          400,
+          300
+        ],
+        [
+          400,
+          500
+        ],
+        [
+          200,
+          500
+        ]
+      ],
+      "allowed_directions": [
+        "straight"
+      ],
+      "primary_direction": "straight",
+      "direction": "straight"
+    },
+    {
+      "name": "Zone 2 - Left+Straight",
+      "points": [
+        [
+          100,
+          100
+        ],
+        [
+          250,
+          100
+        ],
+        [
+          250,
+          250
+        ],
+        [
+          100,
+          250
+        ]
+      ],
+      "allowed_directions": [
+        "left",
+        "straight"
+      ],
+      "primary_direction": "straight",
+      "direction": "straight"
+    }
+  ],
+  "reference_vector": {
+    "p1": [
+      320,
+      100
+    ],
+    "p2": [
+      320,
+      400
+    ]
+  }
+}

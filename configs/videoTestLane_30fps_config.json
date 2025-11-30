@@ -1,0 +1,99 @@
+{
+  "video_name": "videoTestLane_30fps.mp4",
+  "video_path": "D:/test adcv/videoTestLane_30fps.mp4",
+  "lanes": [
+    {
+      "points": [
+        [
+          545,
+          440
+        ],
+        [
+          935,
+          455
+        ],
+        [
+          1048,
+          1055
+        ],
+        [
+          90,
+          1050
+        ],
+        [
+          536,
+          435
+        ]
+      ],
+      "label": "Unnamed Lane",
+      "allowed_types": [
+        "o to",
+        "xe bus",
+        "xe tai"
+      ]
+    },
+    {
+      "points": [
+        [
+          952,
+          457
+        ],
+        [
+          1053,
+          1035
+        ],
+        [
+          1453,
+          1001
+        ],
+        [
+          1134,
+          465
+        ],
+        [
+          961,
+          455
+        ]
+      ],
+      "label": "Unnamed Lane",
+      "allowed_types": [
+        "o to",
+        "xe bus",
+        "xe may"
+      ]
+    },
+    {
+      "points": [
+        [
+          1160,
+          472
+        ],
+        [
+          1321,
+          459
+        ],
+        [
+          1751,
+          976
+        ],
+        [
+          1470,
+          990
+        ],
+        [
+          1156,
+          466
+        ]
+      ],
+      "label": "Unnamed Lane",
+      "allowed_types": [
+        "xe dap",
+        "xe may"
+      ]
+    }
+  ],
+  "stopline": null,
+  "traffic_lights": [],
+  "direction_zones": [],
+  "reference_vector": null
+}

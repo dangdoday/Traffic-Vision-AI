@@ -1,0 +1,63 @@
+{
+  "video_name": "videotest1_30fps.mp4",
+  "video_path": "D:/test adcv/videotest1_30fps.mp4",
+  "lanes": [],
+  "stopline": {
+    "p1": [
+      558,
+      720
+    ],
+    "p2": [
+      1175,
+      695
+    ]
+  },
+  "traffic_lights": [
+    {
+      "x1": 1093,
+      "y1": 318,
+      "x2": 1108,
+      "y2": 360,
+      "type": "đi thẳng",
+      "color": "đỏ"
+    }
+  ],
+  "direction_zones": [
+    {
+      "name": "roi_1",
+      "points": [
+        [
+          448,
+          1068
+        ],
+        [
+          755,
+          468
+        ],
+        [
+          997,
+          459
+        ],
+        [
+          1301,
+          1059
+        ]
+      ],
+      "allowed_directions": [
+        "straight"
+      ],
+      "primary_direction": "straight",
+      "direction": "straight"
+    }
+  ],
+  "reference_vector": {
+    "p1": [
+      459,
+      1066
+    ],
+    "p2": [
+      521,
+      958
+    ]
+  }
+}
