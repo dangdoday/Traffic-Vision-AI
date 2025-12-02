@@ -172,8 +172,63 @@ def point_to_segment_distance(px, py, x1, y1, x2, y2):
     ny = y1 + t * dy
     return np.sqrt((px - nx)**2 + (py - ny)**2)
 
-def is_on_stop_line(cx, cy, threshold=15):
-    """Check if point is on THE stopline"""
+def has_crossed_stopline(cx, cy, min_distance=5):
+    """Kiểm tra xe đã VƯỢT QUA vạch dừng
+    
+    ⚠️ LOGIC MỚI: Tâm xe phải TRÙNG với vạch dừng (trong threshold) thì mới tính là crossed
+    Điều này loại bỏ hoàn toàn xe đi ngang vì:
+    - Xe đi ngang: cx thay đổi nhiều, cy gần như không đổi → cy KHÔNG trùng stopline_y
+    - Xe đi từ dưới lên: cy giảm dần và SẼ trùng với stopline_y tại 1 thời điểm
+    
+    Args:
+        cx, cy: Tọa độ tâm xe
+        min_distance: Khoảng threshold cho "trùng vạch" (mặc định 5px)
+    
+    Returns:
+        True nếu tâm xe TRÙNG với vạch dừng (trong khoảng threshold)
+              VÀ xe nằm trong phạm vi x của vạch
+        False nếu không trùng hoặc xe đi ngang
+    """
+    global STOP_LINE
+    if STOP_LINE is None:
+        return False
+    
+    p1, p2 = STOP_LINE
+    
+    # Tính y trung bình của vạch dừng
+    stopline_y = (p1[1] + p2[1]) / 2
+    
+    # Tính phạm vi x của vạch dừng
+    stopline_x_min = min(p1[0], p2[0])
+    stopline_x_max = max(p1[0], p2[0])
+    
+    # ⚠️ CRITICAL 1: Xe phải nằm ĐÚNG trong phạm vi X của vạch dừng
+    # Không cho margin → Chỉ bắt xe đi thẳng qua vạch
+    if not (stopline_x_min <= cx <= stopline_x_max):
+        return False  # Xe ngoài phạm vi vạch dừng
+    
+    # ⚠️ CRITICAL 2: CHỈ bắt xe KHI ĐÃ VƯỢT QUA vạch dừng
+    # KHÔNG bắt xe đang tiến đến vạch (cy > stopline_y)
+    # CHỈ bắt xe đã qua vạch một chút (cy < stopline_y)
+    # 
+    # Logic: Xe phải QUA vạch ít nhất 1px (cy <= stopline_y - 1)
+    # VÀ không quá xa (trong vùng min_distance pixels)
+    
+    if cy <= stopline_y - 1:  # Xe đã qua vạch (ít nhất 1px)
+        return True
+    
+    return False
+
+def is_on_stop_line(cx, cy, threshold=80):
+    """Check if point is on THE stopline
+    
+    Args:
+        threshold: Khoảng cách cho phép (pixels)
+                   Mặc định 80px để:
+                   - Bù offset camera góc cao (~30-50px)
+                   - Buffer an toàn (~30px)
+                   → Tránh bắt sai khi xe còn cách vạch dừng
+    """
     global STOP_LINE
     if STOP_LINE is None:
         return False
@@ -361,14 +416,20 @@ def check_lane_direction_match(vehicle_direction, lane_roi_index):
         return (False, "Unknown direction - cannot determine")
     
     lane_roi = DIRECTION_ROIS[lane_roi_index]
-    primary_dir = lane_roi.get('primary_direction', 'unknown')
-    secondary_dirs = lane_roi.get('secondary_directions', [])
-    allowed_dirs = [primary_dir] + secondary_dirs
+    
+    # ✅ FIX: Dùng allowed_directions thay vì primary + secondary
+    allowed_dirs = lane_roi.get('allowed_directions', [])
+    
+    # Backward compatibility: nếu không có allowed_directions, dùng primary_direction
+    if not allowed_dirs:
+        primary_dir = lane_roi.get('primary_direction', lane_roi.get('direction', 'unknown'))
+        allowed_dirs = [primary_dir]
     
     if vehicle_direction not in allowed_dirs:
-        return (True, f"🚨 VI PHẠM - Xe đi {vehicle_direction} trong làn {primary_dir}")
+        allowed_str = ', '.join(allowed_dirs)
+        return (True, f"🚨 VI PHẠM - Xe đi {vehicle_direction} (Chỉ được: {allowed_str})")
     
-    return (False, f"✅ OK - Đi đúng làn {primary_dir}")
+    return (False, f"✅ OK - Đi đúng hướng ({vehicle_direction})")
 
 def check_tl_violation(track_id, vehicle_direction):
     """Check if vehicle crossing stopline is a violation.
@@ -419,17 +480,24 @@ def check_tl_violation(track_id, vehicle_direction):
         })
     
     # ========================================
-    # STEP 2: RULE - Rẽ phải LUÔN OK khi đèn đỏ
+    # STEP 2: Xử lý RẼ PHẢI
     # ========================================
     if vehicle_direction == 'right':
-        # Kiểm tra xem có đèn rẽ phải xanh không
-        for light in lights_by_type['rẽ phải']:
-            if light['color'] == 'xanh':
-                return (False, f"✅ RIGHT TURN - Green arrow ALLOWED")
+        # Kiểm tra xem có đèn rẽ phải chuyên biệt không
+        if lights_by_type['rẽ phải']:  # Có đèn rẽ phải chuyên biệt
+            for light in lights_by_type['rẽ phải']:
+                if light['color'] == 'xanh':
+                    return (False, f"✅ RIGHT TURN - Green right arrow ALLOWED")
+                elif light['color'] == 'đỏ':
+                    # ⚠️ STRICT MODE: Nếu có đèn rẽ phải chuyên biệt đỏ → VI PHẠM
+                    # (Tương tự rẽ trái - xe phải tuân theo đèn chuyên biệt)
+                    other_lights = f"straight={'xanh' if any(l['color']=='xanh' for l in lights_by_type['đi thẳng']) else 'đỏ/off'}"
+                    return (True, f"🚨 VI PHẠM - Đèn rẽ phải ĐỎ (xe rẽ phải phải tuân theo đèn rẽ phải, {other_lights})")
+                # Vàng → bỏ qua, check đèn khác
         
-        # Nếu không có đèn rẽ phải hoặc đèn rẽ phải đỏ
-        # → Theo luật VN: RẼ PHẢI VẪN ĐƯỢC PHÉP
-        return (False, f"✅ RIGHT TURN on RED - ALLOWED by VN law (Điều 7, TT 65/2015)")
+        # Nếu KHÔNG có đèn rẽ phải chuyên biệt
+        # → Theo luật VN: RẼ PHẢI ĐƯỢC PHÉP khi đèn đỏ
+        return (False, f"✅ RIGHT TURN on RED - ALLOWED by VN law (no right arrow, Điều 7, TT 65/2015)")
     
     # ========================================
     # STEP 3: Kiểm tra đèn CHUYÊN BIỆT trước (ưu tiên cao)
@@ -442,8 +510,20 @@ def check_tl_violation(track_id, vehicle_direction):
                 if light['color'] == 'xanh':
                     return (False, f"✅ LEFT TURN - Green left arrow ALLOWED")
                 elif light['color'] == 'đỏ':
-                    return (True, f"🚨 VI PHẠM - Đèn rẽ trái ĐỎ")
+                    # ⚠️ CRITICAL: Xe rẽ trái khi đèn rẽ trái đỏ = VI PHẠM
+                    # (Dù đèn thẳng có xanh cũng không được phép!)
+                    other_lights = f"straight={'xanh' if any(l['color']=='xanh' for l in lights_by_type['đi thẳng']) else 'đỏ/off'}"
+                    return (True, f"🚨 VI PHẠM - Đèn rẽ trái ĐỎ (xe rẽ trái phải tuân theo đèn rẽ trái, {other_lights})")
                 # Vàng → bỏ qua, check đèn khác
+        
+        # ⚠️ CRITICAL: Nếu có đèn đi thẳng xanh mà xe rẽ trái = VI PHẠM
+        # (Đèn đi thẳng CHỈ cho đi thẳng, không cho rẽ trái)
+        if lights_by_type['đi thẳng']:
+            for light in lights_by_type['đi thẳng']:
+                if light['color'] == 'xanh':
+                    return (True, f"🚨 VI PHẠM - Đèn đi thẳng xanh CHỈ cho đi thẳng, KHÔNG cho rẽ trái")
+                elif light['color'] == 'đỏ':
+                    return (True, f"🚨 VI PHẠM - Đèn đi thẳng ĐỎ cấm rẽ trái")
     
     # Case: Xe đi thẳng → CHỈ CHECK đèn đi thẳng (KHÔNG check đèn rẽ trái!)
     if vehicle_direction == 'straight':
@@ -496,19 +576,7 @@ def check_tl_violation(track_id, vehicle_direction):
                 # Xe đi thẳng đã xử lý ở STEP 3
     
     # ========================================
-    # STEP 5: Kiểm tra đèn ĐI THẲNG cho xe rẽ trái (fallback)
-    # ========================================
-    if vehicle_direction == 'left' and lights_by_type['đi thẳng']:
-        # Nếu không có đèn rẽ trái chuyên biệt → xe rẽ trái phải theo đèn thẳng
-        if not lights_by_type['rẽ trái']:
-            for light in lights_by_type['đi thẳng']:
-                if light['color'] == 'xanh':
-                    return (False, f"✅ LEFT TURN - Straight arrow green ALLOWED (no left arrow)")
-                elif light['color'] == 'đỏ':
-                    return (True, f"🚨 VI PHẠM - Đèn thẳng ĐỎ cấm rẽ trái")
-    
-    # ========================================
-    # STEP 6: Xử lý UNKNOWN direction
+    # STEP 5: Xử lý UNKNOWN direction
     # ========================================
     if vehicle_direction == 'unknown':
         # ⚠️ KHÔNG PHẠT khi không xác định được hướng (benefit of doubt)
@@ -527,7 +595,7 @@ def check_tl_violation(track_id, vehicle_direction):
             return (False, f"⚠️ Unknown direction - No violation (benefit of doubt)")
     
     # ========================================
-    # STEP 7: Mặc định - Không phạt nếu không rõ
+    # STEP 6: Mặc định - Không phạt nếu không rõ
     # ========================================
     return (False, f"⚠️ No clear violation - dir={vehicle_direction}")
 
@@ -862,6 +930,7 @@ class MainWindow(QMainWindow):
             'DIRECTION_ROIS': DIRECTION_ROIS,
             'get_show_all_boxes': lambda: globals()['_show_all_boxes'],
             'is_on_stop_line': is_on_stop_line,
+            'has_crossed_stopline': has_crossed_stopline,
             'check_tl_violation': check_tl_violation,
             'point_in_polygon': point_in_polygon,
             'VIOLATOR_TRACK_IDS': VIOLATOR_TRACK_IDS,
@@ -3243,6 +3312,7 @@ class MainWindow(QMainWindow):
                 'DIRECTION_ROIS': DIRECTION_ROIS,
                 'get_show_all_boxes': lambda: globals()['_show_all_boxes'],
                 'is_on_stop_line': is_on_stop_line,
+                'has_crossed_stopline': has_crossed_stopline,
                 'check_tl_violation': check_tl_violation,
                 'point_in_polygon': point_in_polygon,
                 'VIOLATOR_TRACK_IDS': VIOLATOR_TRACK_IDS,
@@ -3553,6 +3623,11 @@ class MainWindow(QMainWindow):
         DIRECTION_ROIS.clear()
         DIRECTION_ROIS.extend(config['direction_zones'])
         
+        # ⚠️ CRITICAL: Pass direction ROIs to video thread
+        if hasattr(self, 'thread') and self.thread is not None:
+            self.thread.load_direction_rois(DIRECTION_ROIS)
+            print(f"✅ Passed {len(DIRECTION_ROIS)} direction ROIs to VideoThread")
+        
         # Load reference vector
         if config['reference_vector']:
             self.ref_vector_p1 = list(config['reference_vector'][0])
@@ -3565,10 +3640,15 @@ class MainWindow(QMainWindow):
             self.ref_vector_label.setStyleSheet("QLabel { color: green; font-weight: bold; }")
             print(f"✅ Reference Vector loaded: {angle:.1f}° from {self.ref_vector_p1} to {self.ref_vector_p2}")
             
-            # ⚠️ CRITICAL: Apply reference angle to VehicleTracker
+            # ⚠️ CRITICAL: Apply reference vector to TrajectoryAnalyzer
             if hasattr(self, 'thread') and self.thread is not None:
+                self.thread.set_reference_vector_from_points(
+                    tuple(self.ref_vector_p1), 
+                    tuple(self.ref_vector_p2)
+                )
+                # Also set to old VehicleTracker for backward compatibility
                 self.thread.set_reference_angle(angle)
-                print(f"🎯 Applied ref_angle={angle:.1f}° to VehicleTracker from config")
+                print(f"🎯 Applied reference vector to TrajectoryAnalyzer and VehicleTracker from config")
         else:
             self.ref_vector_p1 = None
             self.ref_vector_p2 = None

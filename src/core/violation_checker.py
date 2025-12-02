@@ -173,14 +173,20 @@ def check_lane_direction_match(vehicle_direction, lane_roi_index, direction_rois
         return (False, "Unknown direction - cannot determine")
     
     lane_roi = direction_rois[lane_roi_index]
-    primary_dir = lane_roi.get('primary_direction', 'unknown')
-    secondary_dirs = lane_roi.get('secondary_directions', [])
-    allowed_dirs = [primary_dir] + secondary_dirs
+    
+    # ✅ FIX: Dùng allowed_directions thay vì primary + secondary
+    allowed_dirs = lane_roi.get('allowed_directions', [])
+    
+    # Backward compatibility: nếu không có allowed_directions, dùng primary_direction
+    if not allowed_dirs:
+        primary_dir = lane_roi.get('primary_direction', lane_roi.get('direction', 'unknown'))
+        allowed_dirs = [primary_dir]
     
     if vehicle_direction not in allowed_dirs:
-        return (True, f"🚨 VI PHẠM - Xe đi {vehicle_direction} trong làn {primary_dir}")
+        allowed_str = ', '.join(allowed_dirs)
+        return (True, f"🚨 VI PHẠM - Xe đi {vehicle_direction} (Chỉ được: {allowed_str})")
     
-    return (False, f"✅ OK - Đi đúng làn {primary_dir}")
+    return (False, f"✅ OK - Đi đúng hướng ({vehicle_direction})")
 
 
 def check_tl_violation(track_id, vehicle_direction, tl_rois, vehicle_directions):

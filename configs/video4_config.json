@@ -1,0 +1,18 @@
+{
+  "video_name": "video4.mp4",
+  "video_path": "D:/test adcv/video4.mp4",
+  "lanes": [],
+  "stopline": {
+    "p1": [
+      290,
+      256
+    ],
+    "p2": [
+      781,
+      249
+    ]
+  },
+  "traffic_lights": [],
+  "direction_zones": [],
+  "reference_vector": null
+}
