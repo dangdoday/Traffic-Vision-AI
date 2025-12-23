@@ -21,7 +21,6 @@ def point_in_polygon(point, polygon):
 
 def distance_point_to_segment(px, py, x1, y1, x2, y2):
     """Calculate the distance from a point to a line segment."""
-    import numpy as np
     vx, vy = x2 - x1, y2 - y1
     wx, wy = px - x1, py - y1
 
@@ -37,30 +36,3 @@ def distance_point_to_segment(px, py, x1, y1, x2, y2):
     bx = x1 + b * vx
     by = y1 + b * vy
     return np.hypot(px - bx, py - by)
-
-
-# Alias for compatibility
-point_to_segment_distance = distance_point_to_segment
-
-
-def calculate_polygon_center(polygon):
-    """
-    Calculate the center point of a polygon
-    
-    Args:
-        polygon: List of (x, y) vertices
-        
-    Returns:
-        (center_x, center_y)
-    """
-    import numpy as np
-    if not polygon:
-        return (0, 0)
-    
-    x_coords = [p[0] for p in polygon]
-    y_coords = [p[1] for p in polygon]
-    
-    center_x = int(np.mean(x_coords))
-    center_y = int(np.mean(y_coords))
-    
-    return (center_x, center_y)

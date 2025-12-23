@@ -13,9 +13,6 @@ class ViolationDetector:
         self.lane_violators: Set[int] = set()
         self.violator_track_ids: Set[int] = set()
         
-        # Chi tiết vi phạm: {track_id: {'type': 'red_light', 'direction': 'left', 'detail': 'text'}}
-        self.violation_details: Dict[int, Dict] = {}
-        
         # Đếm phương tiện
         self.motorbike_count: Set[int] = set()
         self.car_count: Set[int] = set()
@@ -92,35 +89,14 @@ class ViolationDetector:
         # 5. Không rõ trạng thái đèn
         return (False, f"⚠️ No clear violation - dir={vehicle_direction}")
     
-    def add_violation(self, track_id: int, violation_type: str, direction: str = None, detail: str = None):
-        """Thêm vi phạm với chi tiết
-        
-        Args:
-            track_id: ID xe
-            violation_type: 'red_light' hoặc 'lane'
-            direction: Hướng đi ('straight', 'left', 'right')
-            detail: Mô tả chi tiết vi phạm
-        """
+    def add_violation(self, track_id: int, violation_type: str):
+        """Thêm vi phạm"""
         self.violator_track_ids.add(track_id)
         
         if violation_type == 'red_light':
             self.red_light_violators.add(track_id)
         elif violation_type == 'lane':
             self.lane_violators.add(track_id)
-        
-        # Lưu chi tiết
-        self.violation_details[track_id] = {
-            'type': violation_type,
-            'direction': direction,
-            'detail': detail or violation_type
-        }
-        
-        # Lưu chi tiết
-        self.violation_details[track_id] = {
-            'type': violation_type,
-            'direction': direction,
-            'detail': detail or violation_type
-        }
     
     def mark_vehicle_passed(self, track_id: int, vehicle_class: int):
         """Đánh dấu xe đã qua stopline và đếm theo loại"""
@@ -136,33 +112,6 @@ class ViolationDetector:
     def is_violator(self, track_id: int) -> bool:
         """Kiểm tra xe có vi phạm không"""
         return track_id in self.violator_track_ids
-    
-    def get_violation_label(self, track_id: int) -> str:
-        """Lấy label hiển thị vi phạm chi tiết
-        
-        Returns:
-            '[DO-THANG]', '[DO-RE TRAI]', '[SAI LAN]', etc.
-        """
-        if track_id not in self.violation_details:
-            return '[VI PHAM]'
-        
-        detail = self.violation_details[track_id]
-        vtype = detail['type']
-        direction = detail['direction']
-        
-        if vtype == 'red_light':
-            dir_map = {
-                'straight': 'THANG',
-                'left': 'RE TRAI',
-                'right': 'RE PHAI',
-                'unknown': '?'
-            }
-            dir_text = dir_map.get(direction, '?')
-            return f'[DO-{dir_text}]'
-        elif vtype == 'lane':
-            return '[SAI LAN]'
-        else:
-            return '[VI PHAM]'
     
     def get_statistics(self) -> Dict:
         """Lấy thống kê vi phạm"""

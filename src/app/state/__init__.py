@@ -1,14 +1,6 @@
 """
-App State Package
+State package
 """
-from .globals import *
+from .app_state import AppState, get_app_state
 
-__all__ = [
-    'TL_ROIS', 'DIRECTION_ROIS', 'LANE_CONFIGS', 'STOP_LINE',
-    'VEHICLE_POSITIONS', 'VEHICLE_DIRECTIONS',
-    'VIOLATOR_TRACK_IDS', 'RED_LIGHT_VIOLATORS', 'LANE_VIOLATORS',
-    'PASSED_VEHICLES', 'MOTORBIKE_COUNT', 'CAR_COUNT',
-    'VEHICLE_CLASSES', 'ALLOWED_VEHICLE_IDS',
-    'REFERENCE_VECTOR', 'REFERENCE_ANGLE',
-    'reset_all_state', 'reset_detection_state'
-]
+__all__ = ['AppState', 'get_app_state']

@@ -139,7 +139,7 @@ class VehicleTracker:
     def set_ref_angle(self, ref_angle: float):
         """Cập nhật góc tham chiếu cho hướng đi thẳng"""
         self.ref_angle = ref_angle
-        print(f"[Tracker] Updated ref_angle = {ref_angle:.1f} deg")
+        print(f"🧭 VehicleTracker: Updated ref_angle = {ref_angle:.1f}°")
     
     def clear(self):
         """Xóa toàn bộ tracking data"""

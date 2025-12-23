@@ -1,4 +1,5 @@
-"""Video Thread - Xử lý video và detection trong background thread
+"""
+Video Thread - Xử lý video và detection trong background thread
 """
 import cv2
 import numpy as np
@@ -6,9 +7,6 @@ import time
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from core import VehicleTracker, ViolationDetector, StopLineManager, TrafficLightManager
-from core.trajectory_direction_analyzer import TrajectoryDirectionAnalyzer
-from core.roi_direction_manager import ROIDirectionManager
-from core.direction_fusion import DirectionFusion
 
 
 class VideoThread(QThread):
@@ -28,6 +26,7 @@ class VideoThread(QThread):
         self.frame_count = 0
         self.fps_start_time = None
         self.realtime_mode = True  # Toggle realtime sync
+        self.target_display_fps = 30  # Limit display FPS to reduce CPU usage
         
         # Model config (will be set by MainWindow)
         self.model_config = None
@@ -42,19 +41,6 @@ class VideoThread(QThread):
         self.violation_detector = ViolationDetector()
         self.stopline_manager = StopLineManager()
         self.traffic_light_manager = TrafficLightManager()
-        
-        # Initialize Direction Detection modules
-        self.trajectory_analyzer = TrajectoryDirectionAnalyzer(
-            history_size=15,
-            min_points=5,
-            angle_threshold=25.0,
-            reference_vector=(0.0, 1.0)  # Default: đi xuống (0°=East, 90°=South)
-        )
-        self.roi_manager = ROIDirectionManager()
-        self.direction_fusion = DirectionFusion(
-            trajectory_weight=0.7,
-            min_trajectory_confidence=0.5
-        )
         
         # Reference to global state (will be set externally)
         self.globals_ref = None
@@ -72,60 +58,6 @@ class VideoThread(QThread):
         self.vehicle_tracker.set_ref_angle(ref_angle)
         print(f"🧭 VideoThread: Reference angle set to {ref_angle:.1f}°")
     
-    def set_reference_vector(self, ref_vector: tuple):
-        """Set reference vector for trajectory analyzer
-        
-        Args:
-            ref_vector: (dx, dy) reference vector for straight direction
-        """
-        self.trajectory_analyzer.reference_vector = ref_vector
-        print(f"🧭 VideoThread: Reference vector set to {ref_vector}")
-    
-    def set_reference_vector_from_points(self, p1: tuple, p2: tuple):
-        """Set reference vector from two points
-        
-        Args:
-            p1, p2: (x, y) points defining straight direction
-        """
-        self.trajectory_analyzer.set_reference_vector_from_points(p1, p2)
-        print(f"🧭 VideoThread: Reference vector set from points {p1} → {p2}")
-    
-    def load_direction_rois(self, direction_rois: list):
-        """Load direction ROIs into ROI manager
-        
-        Args:
-            direction_rois: List of ROI dicts with 'points' and 'direction' keys
-        """
-        if not direction_rois:
-            print("⚠️ No direction ROIs to load")
-            return
-        
-        # Convert to format expected by ROIDirectionManager
-        self.roi_manager.rois = []
-        self.roi_manager.roi_polygons = []
-        
-        import numpy as np
-        for roi in direction_rois:
-            # Extract direction - could be in 'direction' or 'primary_direction'
-            direction = roi.get('direction', roi.get('primary_direction', 'straight'))
-            
-            # Create ROI dict
-            roi_dict = {
-                'name': roi.get('name', 'ROI'),
-                'direction': direction,
-                'points': roi['points']
-            }
-            self.roi_manager.rois.append(roi_dict)
-            
-            # Convert points to numpy array for cv2.pointPolygonTest
-            pts = np.array(roi['points'], dtype=np.int32)
-            self.roi_manager.roi_polygons.append(pts)
-        
-        print(f"✅ Loaded {len(direction_rois)} direction ROIs into VideoThread")
-        print(f"   - LEFT: {sum(1 for r in self.roi_manager.rois if r['direction'] == 'left')}")
-        print(f"   - STRAIGHT: {sum(1 for r in self.roi_manager.rois if r['direction'] == 'straight')}")
-        print(f"   - RIGHT: {sum(1 for r in self.roi_manager.rois if r['direction'] == 'right')}")
-    
     def run(self):
         """Main video processing loop"""
         cap = cv2.VideoCapture(self.video_path)
@@ -141,6 +73,11 @@ class VideoThread(QThread):
         
         print(f"📹 Video FPS: {video_fps}, Frame interval: {frame_interval:.4f}s")
         print(f"⏱️ Realtime mode: {'ON (may skip frames)' if self.realtime_mode else 'OFF (process all frames)'}")
+        print(f"🎯 Target display FPS: {self.target_display_fps}")
+        
+        # Display frame interval for limiting GUI updates
+        display_interval = 1.0 / self.target_display_fps
+        last_display_time = 0
         
         while self._run_flag:
             current_time = time.time()
@@ -171,7 +108,10 @@ class VideoThread(QThread):
                                 self.error_signal.emit(str(e))
                                 self.detection_enabled = False
                         
-                        self.change_pixmap_signal.emit(frame)
+                        # Only emit to GUI at target display FPS to reduce CPU
+                        if current_time - last_display_time >= display_interval:
+                            self.change_pixmap_signal.emit(frame)
+                            last_display_time = current_time
                         
                         next_frame_time += frame_interval
                         
@@ -185,7 +125,8 @@ class VideoThread(QThread):
                         next_frame_time = time.time()
                 else:
                     self.skipped_frames += 1  # Count skipped frames
-                    self.msleep(1)
+                    # ⚠️ PERFORMANCE: Sleep 10ms instead of 1ms to reduce CPU spin
+                    self.msleep(10)
             else:
                 # FULL PROCESSING MODE: Process every frame (no skip)
                 ret, frame = cap.read()
@@ -210,7 +151,13 @@ class VideoThread(QThread):
                             self.error_signal.emit(str(e))
                             self.detection_enabled = False
                     
-                    self.change_pixmap_signal.emit(frame)
+                    # Only emit to GUI at target display FPS
+                    if current_time - last_display_time >= display_interval:
+                        self.change_pixmap_signal.emit(frame)
+                        last_display_time = current_time
+                    
+                    # ⚠️ PERFORMANCE: Small sleep to yield CPU
+                    self.msleep(5)
                 else:
                     # Video ended, loop back
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
@@ -265,12 +212,12 @@ class VideoThread(QThread):
         # Get model config or use defaults
         imgsz = 416
         conf = 0.3
-        classes = [0, 1, 2, 3, 4]  # allow all trained classes by default
+        classes = [0, 1, 3, 4]
         
         if self.model_config:
-            imgsz = self.model_config.get('default_imgsz', imgsz)
-            conf = self.model_config.get('default_conf', conf)
-            classes = self.model_config.get('classes', classes)
+            imgsz = self.model_config.get('default_imgsz', 416)
+            conf = self.model_config.get('default_conf', 0.3)
+            classes = self.model_config.get('classes', [0, 1, 3, 4])
         
         # Run YOLO tracking with dynamic config
         results = self.model.track(
@@ -312,33 +259,10 @@ class VideoThread(QThread):
             
             # Track vehicle position for direction calculation using OOP
             if track_id != -1:
-                # 1. Update trajectory analyzer (tính góc α = atan2(v × r, v · r))
-                self.trajectory_analyzer.update_position(track_id, cx, cy)
-                trajectory_direction = self.trajectory_analyzer.get_trajectory_direction(track_id)
-                
-                # 2. Check ROI direction (Ray Casting - Point-in-Polygon)
-                roi_direction = self.roi_manager.get_roi_direction(cx, cy)
-                
-                # 3. Fusion: Kết hợp Trajectory + ROI
-                trajectory_info = self.trajectory_analyzer.get_trajectory_info(track_id)
-                trajectory_confidence = trajectory_info.get('confidence', 0.0)
-                
-                vehicle_direction, direction_source, is_conflict = self.direction_fusion.fuse_directions(
-                    roi_direction=roi_direction,
-                    trajectory_direction=trajectory_direction,
-                    trajectory_confidence=trajectory_confidence
-                )
-                
-                # Keep VehicleTracker for stopline crossing detection
-                self.vehicle_tracker.update_position(track_id, cx, cy)
+                vehicle_direction = self.vehicle_tracker.update_position(track_id, cx, cy)
                 
                 # Check if vehicle crossed THE stop line
-                # ⚠️ LOGIC QUAN TRỌNG: TẤT CẢ xe (straight/left/right) đều PHẢI qua vạch dừng
-                # has_crossed_stopline() sẽ tự động lọc xe đi ngang bằng cách:
-                # 1. Kiểm tra cx trong phạm vi vạch dừng (margin_x = 10px)
-                # 2. Kiểm tra cy <= stopline_y - 5 (xe đi từ dưới lên)
-                has_crossed_stopline = self.globals_ref.get('has_crossed_stopline')
-                if has_crossed_stopline and has_crossed_stopline(cx, cy, min_distance=5):
+                if is_on_stop_line(cx, cy, threshold=20):
                     if not self.violation_detector.passed_vehicles.__contains__(track_id):
                         # ⚠️ CRITICAL: Đánh dấu điểm bắt đầu khi xe VỪA qua stopline
                         self.vehicle_tracker.mark_stopline_crossing(track_id, cx, cy)
@@ -358,29 +282,18 @@ class VideoThread(QThread):
                             tl_states = [f"{tl_type}:{color}" for _, _, _, _, tl_type, color in TL_ROIS]
                             print(f"🚦 Vehicle crossing: {vehicle_label} (ID={track_id}) Dir={vehicle_direction} | TL states: {tl_states}")
                         
-                                # ⚠️ ĐIỀU KIỆN QUAN TRỌNG: CHỈ kiểm tra vi phạm đèn đỏ KHI xe ĐÃ QUA vạch dừng
-                        # Nếu xe chưa qua vạch dừng, block này KHÔNG chạy → KHÔNG có lỗi đèn đỏ
-                        print(f"[DEBUG] Vehicle ID={track_id} CROSSED stopline at ({cx},{cy}), checking TL violation...")
-                        
                         # Check for TL violation using direction and OOP
                         is_violation, reason = check_tl_violation(track_id, vehicle_direction)
                         if is_violation:
-                            # Lưu vi phạm với chi tiết hướng đi
-                            self.violation_detector.add_violation(
-                                track_id, 
-                                'red_light',
-                                direction=vehicle_direction,
-                                detail=reason
-                            )
+                            self.violation_detector.add_violation(track_id, 'red_light')
                             # Update globals for backward compatibility
                             RED_LIGHT_VIOLATORS.add(track_id)
                             VIOLATOR_TRACK_IDS.add(track_id)
-                            print(f"🚨 TL VIOLATION CONFIRMED: {vehicle_label} (ID={track_id}) Dir={vehicle_direction} - {reason}")
+                            print(f"🚨 TL VIOLATION: {vehicle_label} (ID={track_id}) Dir={vehicle_direction} - {reason}")
                         else:
                             print(f"✅ Vehicle passed: {vehicle_label} (ID={track_id}) Dir={vehicle_direction} - {reason}")
             
-            # ⚠️ ĐIỀU KIỆN MỚI: Kiểm tra vi phạm làn KHÔNG CẦN qua vạch dừng
-            # Check lane violation (độc lập với stopline)
+            # Check lane violation
             for lane in LANE_CONFIGS:
                 poly = lane["poly"]
                 allowed = lane.get("allowed_labels", ["all"])
@@ -389,13 +302,7 @@ class VideoThread(QThread):
                     # Check if vehicle type is allowed in this lane
                     if "all" not in allowed and vehicle_label not in allowed:
                         if not self.violation_detector.lane_violators.__contains__(track_id):
-                            # Lưu vi phạm sai làn với chi tiết
-                            self.violation_detector.add_violation(
-                                track_id, 
-                                'lane',
-                                direction=None,
-                                detail=f"{vehicle_label} in restricted lane"
-                            )
+                            self.violation_detector.add_violation(track_id, 'lane')
                             # Update globals for backward compatibility
                             LANE_VIOLATORS.add(track_id)
                             VIOLATOR_TRACK_IDS.add(track_id)
@@ -404,32 +311,23 @@ class VideoThread(QThread):
             
             # Draw vehicle (respect _show_all_boxes flag)
             is_violator = self.violation_detector.is_violator(track_id)
-            is_lane_violator = track_id in self.violation_detector.lane_violators
-            is_tl_violator = track_id in self.violation_detector.red_light_violators
             
-            # ⚠️ CRITICAL: CHỈ hiển thị vi phạm đèn đỏ SAU KHI xe qua stopline
-            # Vi phạm làn: hiển thị ngay lập tức
+            # ⚠️ CRITICAL: Only show RED box if vehicle is violator AND has passed stopline
             has_passed_stopline = track_id in PASSED_VEHICLES
-            show_as_violator = is_lane_violator or (is_tl_violator and has_passed_stopline)
-            
-            # Debug: In ra khi xe bị đánh dấu vi phạm đèn đỏ nhưng chưa qua stopline
-            if is_tl_violator and not has_passed_stopline:
-                print(f"[WARNING] Vehicle ID={track_id} marked as TL violator but NOT passed stopline yet! (NOT showing as violator)")
+            show_as_violator = is_violator and has_passed_stopline
             
             # Get real-time _show_all_boxes value via lambda function
             get_show_all_boxes = self.globals_ref.get('get_show_all_boxes')
             _show_all_boxes = get_show_all_boxes() if get_show_all_boxes else True
             
-            # Only draw if: _show_all_boxes=True OR vehicle is violator
+            # Only draw if: _show_all_boxes=True OR vehicle is violator (and passed)
             if _show_all_boxes or show_as_violator:
                 box_color = (0, 0, 255) if show_as_violator else (0, 255, 0)
                 cv2.rectangle(frame, (x1, y1), (x2, y2), box_color, 2)
                 
                 label_text = f"{vehicle_label} ID:{track_id}"
                 if show_as_violator:
-                    # Lấy nhãn vi phạm chi tiết từ violation_detector
-                    violation_label = self.violation_detector.get_violation_label(track_id)
-                    label_text += f" {violation_label}"
+                    label_text += " [VIOLATOR]"
                 
                 cv2.putText(frame, label_text, (x1, y1-5),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 2)

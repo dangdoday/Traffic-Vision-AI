@@ -25,7 +25,7 @@ class ConfigManager:
         
         self.config_dir = Path(config_dir)
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        print(f"[Config] Config directory: {self.config_dir}")
+        print(f"📁 Config directory: {self.config_dir}")
     
     def get_config_path(self, video_path: str) -> Path:
         """
@@ -78,11 +78,11 @@ class ConfigManager:
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=2, ensure_ascii=False)
             
-            print(f"[OK] Configuration saved: {config_path}")
+            print(f"✅ Configuration saved: {config_path}")
             return True
             
         except Exception as e:
-            print(f"[X] Failed to save config: {e}")
+            print(f"❌ Failed to save config: {e}")
             return False
     
     def load_config(self, video_path: str) -> Optional[Dict]:
@@ -114,7 +114,7 @@ class ConfigManager:
                 'reference_vector': self._deserialize_reference_vector(config_data.get('reference_vector'))
             }
             
-            print(f"[OK] Configuration loaded: {config_path}")
+            print(f"✅ Configuration loaded: {config_path}")
             print(f"   - Lanes: {len(result['lanes'])}")
             print(f"   - Stopline: {'Yes' if result['stopline'] else 'No'}")
             print(f"   - Traffic Lights: {len(result['traffic_lights'])}")
@@ -123,7 +123,7 @@ class ConfigManager:
             return result
             
         except Exception as e:
-            print(f"[X] Failed to load config: {e}")
+            print(f"❌ Failed to load config: {e}")
             return None
     
     def config_exists(self, video_path: str) -> bool:
@@ -135,13 +135,10 @@ class ConfigManager:
         """Convert lane configs to JSON-serializable format"""
         serialized = []
         for lane in lane_configs:
-            # Support both 'poly' and 'points' keys for backward compatibility
-            points = lane.get('poly', lane.get('points', []))
             serialized.append({
-                'points': points,
+                'points': lane['points'],
                 'label': lane.get('label', 'Unnamed Lane'),
-                'allowed_types': lane.get('allowed_types', []),
-                'allowed_labels': lane.get('allowed_labels', ['all'])
+                'allowed_types': lane.get('allowed_types', [])
             })
         return serialized
     
@@ -201,10 +198,9 @@ class ConfigManager:
         lanes = []
         for lane in lanes_data:
             lanes.append({
-                'poly': lane['points'],  # Use 'poly' key for integrated_main.py compatibility
+                'points': lane['points'],
                 'label': lane.get('label', 'Unnamed Lane'),
-                'allowed_types': lane.get('allowed_types', []),
-                'allowed_labels': lane.get('allowed_labels', ['all'])
+                'allowed_types': lane.get('allowed_types', [])
             })
         return lanes
     

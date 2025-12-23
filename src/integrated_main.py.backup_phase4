@@ -35,11 +35,7 @@ from tools.roi_editor import ROIEditor
 from utils.config_manager import ConfigManager
 
 # Import handlers
-from handlers import (
-    DirectionROIHandlerMixin, ReferenceVectorHandlerMixin, TrafficLightHandlerMixin, 
-    LaneHandlerMixin, ConfigHandlerMixin, EventHandlerMixin, ModelHandlerMixin,
-    DisplayHandlerMixin, DialogHandlerMixin, VideoHandlerMixin, DetectionHandlerMixin
-)
+from handlers import DirectionROIHandlerMixin, ReferenceVectorHandlerMixin, TrafficLightHandlerMixin, LaneHandlerMixin, ConfigHandlerMixin, EventHandlerMixin, ModelHandlerMixin
 
 # Import new modular functions
 from app.geometry import point_in_polygon, point_to_segment_distance, is_on_stop_line
@@ -121,7 +117,7 @@ def is_on_stop_line(cx, cy, threshold=15):
 # They use TL_ROIS, DIRECTION_ROIS, VEHICLE_DIRECTIONS via set_violation_checker_globals() called above
 
 
-class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMixin, TrafficLightHandlerMixin, LaneHandlerMixin, ConfigHandlerMixin, EventHandlerMixin, ModelHandlerMixin, DisplayHandlerMixin, DialogHandlerMixin, VideoHandlerMixin, DetectionHandlerMixin):
+class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMixin, TrafficLightHandlerMixin, LaneHandlerMixin, ConfigHandlerMixin, EventHandlerMixin, ModelHandlerMixin):
     def __init__(self):
         super().__init__()
         
@@ -390,9 +386,6 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         self.show_direction_rois = True
         self.show_lanes = True  # Toggle for lane display
         self.show_roi_overlays = True  # Toggle for ROI overlay display
-        self.show_stopline = True  # Toggle for stopline display
-        self.show_traffic_lights = True  # Toggle for traffic lights display
-        self.show_ref_vector = True  # Toggle for reference vector display
         self.ref_vector_p1 = None
         self.ref_vector_p2 = None
         
@@ -485,8 +478,191 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         # No auto-detect - user will draw TL ROIs manually
         self.update_lists()
     
-    # NOTE: update_image moved to DisplayHandlerMixin
-    # NOTE: draw_direction_rois moved to DisplayHandlerMixin
+    def update_image(self, frame):
+        global _tmp_lane_pts, _tmp_stop_point, _drawing_mode, _detection_running
+        global _tmp_direction_roi_pts
+        
+        self.current_frame = frame.copy()
+        display = frame.copy()
+        
+        # Update TL colors continuously (HSV pixel counting)
+        self.update_tl_colors(display)
+        
+        # Draw direction ROIs (if enabled)
+        if self.show_direction_rois and self.show_roi_overlays:
+            display = self.draw_direction_rois(display)
+        
+        # Draw lanes and stop line (if enabled)
+        if self.show_lanes:
+            display = self.draw_lanes(display)
+            display = self.draw_stop_line(display)
+        
+        # Draw temporary lane
+        if _drawing_mode == 'lane' and len(_tmp_lane_pts) > 0:
+            pts_tmp = np.array(_tmp_lane_pts, dtype=np.int32)
+            cv2.polylines(display, [pts_tmp], isClosed=False, color=(0, 255, 0), thickness=2)
+            for p in _tmp_lane_pts:
+                cv2.circle(display, p, 4, (0, 255, 0), -1)
+        
+        # Draw temporary stop line point
+        if _drawing_mode == 'stopline' and _tmp_stop_point is not None:
+            cv2.circle(display, _tmp_stop_point, 5, (0, 0, 255), -1)
+        
+        # Draw temporary direction ROI
+        if _drawing_mode == 'direction_roi' and len(_tmp_direction_roi_pts) > 0:
+            DIRECTION_COLORS = {
+                'left': (0, 0, 255),
+                'right': (0, 165, 255),
+                'straight': (0, 255, 0)
+            }
+            color = DIRECTION_COLORS.get(_selected_direction, (128, 128, 128))
+            pts_tmp = np.array(_tmp_direction_roi_pts, dtype=np.int32)
+            cv2.polylines(display, [pts_tmp], isClosed=False, color=color, thickness=2)
+            for p in _tmp_direction_roi_pts:
+                cv2.circle(display, tuple(p), 5, color, -1)
+        
+        # Draw temporary TL point
+        if _drawing_mode == 'tl_manual' and _tmp_tl_point is not None:
+            cv2.circle(display, _tmp_tl_point, 6, (0, 200, 255), -1)
+            cv2.putText(display, "P1", (_tmp_tl_point[0]+8, _tmp_tl_point[1]), 
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 255), 2)
+        
+        # Draw reference vector (for direction calibration)
+        if self.ref_vector_p1 is not None and self.ref_vector_p2 is not None:
+            import math
+            p1 = self.ref_vector_p1
+            p2 = self.ref_vector_p2
+            # Draw arrow showing reference direction
+            cv2.arrowedLine(display, p1, p2, (255, 0, 255), 3, tipLength=0.05)
+            # Draw start/end points
+            cv2.circle(display, p1, 6, (255, 0, 255), -1)
+            cv2.circle(display, p2, 6, (255, 0, 255), -1)
+            # Draw label with angle
+            mid = ((p1[0] + p2[0]) // 2, (p1[1] + p2[1]) // 2)
+            dx = p2[0] - p1[0]
+            dy = p2[1] - p1[1]
+            angle = math.degrees(math.atan2(dy, dx))
+            cv2.putText(display, f"REF: {angle:.1f} deg", (mid[0] + 10, mid[1] - 10),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 0, 255), 2, cv2.LINE_AA)
+        elif _drawing_mode == 'ref_vector' and self.ref_vector_p1 is not None:
+            # Show first point while waiting for second
+            cv2.circle(display, self.ref_vector_p1, 6, (255, 0, 255), -1)
+            cv2.putText(display, "Click second point", (self.ref_vector_p1[0] + 10, self.ref_vector_p1[1] - 10),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, (255, 0, 255), 2, cv2.LINE_AA)
+        
+        # Overlay ALL TL ROIs and labels
+        global TL_ROIS
+        for idx, tl_data in enumerate(TL_ROIS):
+            x1, y1, x2, y2, tl_type, current_color = tl_data
+            # Color code by current light color
+            box_color = (128, 128, 128)  # Gray default
+            if current_color == 'đỏ':
+                box_color = (0, 0, 255)  # Red
+                color_display = "DO"
+            elif current_color == 'xanh':
+                box_color = (0, 255, 0)  # Green
+                color_display = "XANH"
+            elif current_color == 'vàng':
+                box_color = (0, 255, 255)  # Yellow
+                color_display = "VANG"
+            else:
+                color_display = "???"
+            
+            # Map tl_type to ASCII for display
+            if tl_type == 'tròn':
+                type_display = "tron"
+            elif tl_type == 'đi thẳng':
+                type_display = "thang"
+            elif tl_type == 'rẽ trái':
+                type_display = "L"
+            elif tl_type == 'rẽ phải':
+                type_display = "R"
+            else:
+                type_display = tl_type
+            
+            cv2.rectangle(display, (x1, y1), (x2, y2), box_color, 2)
+            label_text = f"TL{idx+1}[{type_display}]: {color_display}"
+            cv2.putText(display, label_text, (x1, max(0, y1 - 8)), cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 2, cv2.LINE_AA)
+        
+        # Convert to QImage
+        rgb_image = cv2.cvtColor(display, cv2.COLOR_BGR2RGB)
+        h, w, ch = rgb_image.shape
+        bytes_per_line = ch * w
+        qt_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
+        
+        # Scale to fit label while maintaining aspect ratio
+        scaled_pixmap = QPixmap.fromImage(qt_image).scaled(
+            self.video_label.width(), 
+            self.video_label.height(), 
+            aspectRatioMode=1  # Keep aspect ratio
+        )
+        
+        # Store scale information for accurate click detection
+        self.current_display_scale = min(
+            self.video_label.width() / w,
+            self.video_label.height() / h
+        )
+        self.current_display_width = int(w * self.current_display_scale)
+        self.current_display_height = int(h * self.current_display_scale)
+        self.current_display_offset_x = (self.video_label.width() - self.current_display_width) // 2
+        self.current_display_offset_y = (self.video_label.height() - self.current_display_height) // 2
+        
+        self.video_label.setPixmap(scaled_pixmap)
+    
+    def draw_direction_rois(self, frame):
+        """Draw direction ROIs with transparency"""
+        global DIRECTION_ROIS
+        
+        if not DIRECTION_ROIS:
+            return frame
+        
+        overlay = frame.copy()
+        
+        DIRECTION_COLORS = {
+            'left': (0, 0, 255),      # Đỏ
+            'right': (0, 165, 255),   # Vàng
+            'straight': (0, 255, 0),  # Xanh
+            'unknown': (128, 128, 128)
+        }
+        
+        # Vietnamese labels without accents
+        DIRECTION_LABELS = {
+            'left': 'RE TRAI',
+            'right': 'RE PHAI', 
+            'straight': 'DI THANG',
+            'unknown': 'UNKNOWN'
+        }
+        
+        for i, roi in enumerate(DIRECTION_ROIS):
+            pts = np.array(roi['points'], dtype=np.int32)
+            color = DIRECTION_COLORS.get(roi['direction'], DIRECTION_COLORS['unknown'])
+            
+            # Fill polygon với độ trong suốt
+            cv2.fillPoly(overlay, [pts], color)
+            
+            # Vẽ viền
+            cv2.polylines(frame, [pts], True, color, 2)
+            
+            # Vẽ label ở giữa ROI
+            center_x = int(np.mean([p[0] for p in roi['points']]))
+            center_y = int(np.mean([p[1] for p in roi['points']]))
+            
+            direction_text = DIRECTION_LABELS.get(roi['direction'], roi['direction'].upper())
+            cv2.putText(frame, direction_text, (center_x - 50, center_y),
+                       cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 255, 255), 2)
+        
+        # Blend overlay với frame
+        alpha = 0.25
+        frame = cv2.addWeighted(overlay, alpha, frame, 1 - alpha, 0)
+        
+        # Draw editing overlay if in edit mode
+        if self.roi_editor.is_editing():
+            roi_idx = self.roi_editor.editing_roi_index
+            if roi_idx < len(DIRECTION_ROIS):
+                points = DIRECTION_ROIS[roi_idx]['points']
+                self.roi_editor.draw_editing_overlay(frame, points)
+        
+        return frame
     
     def setup_menu_bar(self):
         """Setup menu bar with organized menus"""
@@ -560,24 +736,12 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         # === EDIT Menu ===
         edit_menu = menubar.addMenu("✏️ &Edit")
         
-        # Edit Lane (dialog)
-        action_edit_lane = QAction("Edit Lane...", self)
-        action_edit_lane.triggered.connect(self.show_edit_lane_dialog)
-        edit_menu.addAction(action_edit_lane)
-        
-        # Edit Lane Interactive (drag points)
-        self.action_edit_lane_interactive = QAction("Edit Lane (Interactive)", self)
-        self.action_edit_lane_interactive.triggered.connect(self.start_edit_lane)
-        edit_menu.addAction(self.action_edit_lane_interactive)
-
         # Edit direction ROI
-        self.action_edit_direction = QAction("Edit Direction ROI...", self)
+        self.action_edit_direction = QAction("Edit Selected Direction ROI", self)
         self.action_edit_direction.setShortcut("E")
-        self.action_edit_direction.triggered.connect(self.show_edit_roi_dialog)
+        self.action_edit_direction.triggered.connect(self.start_edit_direction_roi)
         edit_menu.addAction(self.action_edit_direction)
-
-        edit_menu.addSeparator()
-
+        
         # Smooth ROI
         self.action_smooth_roi = QAction("Smooth ROI", self)
         self.action_smooth_roi.triggered.connect(self.smooth_current_roi)
@@ -622,43 +786,13 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         # === VIEW Menu ===
         view_menu = menubar.addMenu("👁️ &View")
         
-        # Toggle lanes
-        self.action_toggle_lanes = QAction("Show Lanes", self)
-        self.action_toggle_lanes.setCheckable(True)
-        self.action_toggle_lanes.setChecked(True)
-        self.action_toggle_lanes.triggered.connect(self.toggle_lane_display)
-        view_menu.addAction(self.action_toggle_lanes)
-
-        # Toggle stopline
-        self.action_toggle_stopline = QAction("Show Stop Line", self)
-        self.action_toggle_stopline.setCheckable(True)
-        self.action_toggle_stopline.setChecked(True)
-        self.action_toggle_stopline.triggered.connect(self.toggle_stopline_display)
-        view_menu.addAction(self.action_toggle_stopline)
-
-        # Toggle traffic lights
-        self.action_toggle_traffic_lights = QAction("Show Traffic Lights", self)
-        self.action_toggle_traffic_lights.setCheckable(True)
-        self.action_toggle_traffic_lights.setChecked(True)
-        self.action_toggle_traffic_lights.triggered.connect(self.toggle_traffic_lights_display)
-        view_menu.addAction(self.action_toggle_traffic_lights)
-
         # Toggle direction ROIs
-        self.action_toggle_rois = QAction("Show Direction ROIs", self)
-        self.action_toggle_rois.setCheckable(True)
-        self.action_toggle_rois.setChecked(True)
-        self.action_toggle_rois.triggered.connect(self.toggle_roi_display)
-        view_menu.addAction(self.action_toggle_rois)
-
-        # Toggle reference vector
-        self.action_toggle_ref_vector = QAction("Show Reference Vector", self)
-        self.action_toggle_ref_vector.setCheckable(True)
-        self.action_toggle_ref_vector.setChecked(True)
-        self.action_toggle_ref_vector.triggered.connect(self.toggle_ref_vector_display)
-        view_menu.addAction(self.action_toggle_ref_vector)
-
-        view_menu.addSeparator()
-
+        self.action_toggle_direction_rois = QAction("Show Direction ROIs", self)
+        self.action_toggle_direction_rois.setCheckable(True)
+        self.action_toggle_direction_rois.setChecked(True)
+        self.action_toggle_direction_rois.triggered.connect(self.toggle_direction_rois)
+        view_menu.addAction(self.action_toggle_direction_rois)
+        
         # Toggle all boxes
         self.action_toggle_boxes = QAction("Show All Bounding Boxes", self)
         self.action_toggle_boxes.setCheckable(True)
@@ -696,7 +830,32 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         action_conf.triggered.connect(self.show_conf_dialog)
         params_menu.addAction(action_conf)
         
-
+        # === LISTS Menu ===
+        lists_menu = menubar.addMenu("📋 &Lists")
+        
+        # Toggle displays
+        self.action_toggle_lanes = QAction("✅ Show Lanes", self)
+        self.action_toggle_lanes.setCheckable(True)
+        self.action_toggle_lanes.setChecked(True)
+        self.action_toggle_lanes.triggered.connect(self.toggle_lane_display)
+        lists_menu.addAction(self.action_toggle_lanes)
+        
+        self.action_toggle_rois = QAction("✅ Show Direction ROIs", self)
+        self.action_toggle_rois.setCheckable(True)
+        self.action_toggle_rois.setChecked(True)
+        self.action_toggle_rois.triggered.connect(self.toggle_roi_display)
+        lists_menu.addAction(self.action_toggle_rois)
+        
+        lists_menu.addSeparator()
+        
+        # Edit items
+        action_edit_lane = QAction("Edit Lane...", self)
+        action_edit_lane.triggered.connect(self.show_edit_lane_dialog)
+        lists_menu.addAction(action_edit_lane)
+        
+        action_edit_roi = QAction("Edit Direction ROI...", self)
+        action_edit_roi.triggered.connect(self.show_edit_roi_dialog)
+        lists_menu.addAction(action_edit_roi)
         
         # === DETECTION Menu ===
         detection_menu = menubar.addMenu("🚀 &Detection")
@@ -718,22 +877,418 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         action_shortcuts.triggered.connect(self.show_shortcuts)
         help_menu.addAction(action_shortcuts)
     
-    # NOTE: show_about moved to DialogHandlerMixin
-    # NOTE: show_shortcuts moved to DialogHandlerMixin
-    # NOTE: show_imgsz_dialog moved to DialogHandlerMixin
-    # NOTE: show_conf_dialog moved to DialogHandlerMixin
-    # NOTE: show_lane_list_dialog moved to DialogHandlerMixin
-    # NOTE: show_direction_list_dialog moved to DialogHandlerMixin
-    # NOTE: toggle_lane_display moved to DisplayHandlerMixin
-    # NOTE: toggle_roi_display moved to DisplayHandlerMixin
-    # NOTE: show_edit_roi_dialog moved to DetectionHandlerMixin
-    # NOTE: start_edit_selected_roi moved to DetectionHandlerMixin
-    # NOTE: delete_selected_roi moved to DetectionHandlerMixin
-    # NOTE: update_lists moved to DetectionHandlerMixin
-    # NOTE: start_detection moved to DetectionHandlerMixin
-    # NOTE: toggle_bbox_display moved to DisplayHandlerMixin
-    # NOTE: select_video moved to VideoHandlerMixin
-    # NOTE: show_error moved to VideoHandlerMixin
+    def show_about(self):
+        '''Show about dialog'''
+        QMessageBox.about(
+            self,
+            "About Traffic Violation Detector",
+            "<h2>Traffic Violation Detection System</h2>"
+            "<p>Version 2.0</p>"
+            "<p>Advanced traffic violation detection using YOLOv8</p>"
+            "<p><b>Features:</b></p>"
+            "<ul>"
+            "<li>Lane violation detection</li>"
+            "<li>Stopline crossing detection</li>"
+            "<li>Traffic light violation (direction-aware)</li>"
+            "<li>Multi-direction ROI support</li>"
+            "<li>Reference vector for tilted cameras</li>"
+            "<li>Auto save/load configuration</li>"
+            "</ul>"
+        )
+    
+    def show_shortcuts(self):
+        '''Show keyboard shortcuts help'''
+        QMessageBox.information(
+            self,
+            "Keyboard Shortcuts",
+            "<h3>Keyboard Shortcuts</h3>"
+            "<table>"
+            "<tr><td><b>Ctrl+O</b></td><td>Open Video</td></tr>"
+            "<tr><td><b>Ctrl+S</b></td><td>Save Configuration</td></tr>"
+            "<tr><td><b>Ctrl+L</b></td><td>Load Configuration</td></tr>"
+            "<tr><td><b>Ctrl+Q</b></td><td>Exit</td></tr>"
+            "<tr><td colspan='2'><hr></td></tr>"
+            "<tr><td><b>L</b></td><td>Add Lane</td></tr>"
+            "<tr><td><b>S</b></td><td>Set Stop Line</td></tr>"
+            "<tr><td><b>T</b></td><td>Add Traffic Light</td></tr>"
+            "<tr><td><b>D</b></td><td>Draw Direction ROI</td></tr>"
+            "<tr><td><b>R</b></td><td>Set Reference Vector</td></tr>"
+            "<tr><td colspan='2'><hr></td></tr>"
+            "<tr><td><b>Enter</b></td><td>Finish Drawing (Lane/ROI/Ref Vector)</td></tr>"
+            "<tr><td><b>E</b></td><td>Edit Direction ROI</td></tr>"
+            "<tr><td><b>Return</b></td><td>Finish Editing</td></tr>"
+            "<tr><td><b>Delete</b></td><td>Delete Selected</td></tr>"
+            "<tr><td colspan='2'><hr></td></tr>"
+            "<tr><td><b>Space</b></td><td>Start/Stop Detection</td></tr>"
+            "<tr><td><b>F1</b></td><td>Show This Help</td></tr>"
+            "<tr><td colspan='2'><hr></td></tr>"
+            "<tr><td><b>Right-Click</b></td><td>Context Menu on Video</td></tr>"
+            "</table>"
+        )
+    
+    def show_imgsz_dialog(self):
+        """Show dialog to set image size"""
+        from PyQt5.QtWidgets import QInputDialog
+        current_imgsz = self.imgsz_spinbox.value()
+        imgsz, ok = QInputDialog.getInt(
+            self,
+            "Set Image Size",
+            "Enter image size (320-1280, multiple of 32):",
+            current_imgsz,
+            320,
+            1280,
+            32
+        )
+        if ok:
+            self.imgsz_spinbox.setValue(imgsz)
+            self.on_imgsz_changed(imgsz)
+            self.statusBar().showMessage(f"Image size set to: {imgsz}")
+    
+    def show_conf_dialog(self):
+        """Show dialog to set confidence threshold"""
+        from PyQt5.QtWidgets import QInputDialog
+        current_conf = self.conf_spinbox.value()
+        conf, ok = QInputDialog.getDouble(
+            self,
+            "Set Confidence Threshold",
+            "Enter confidence threshold (0.1-0.95):",
+            current_conf,
+            0.1,
+            0.95,
+            2
+        )
+        if ok:
+            self.conf_spinbox.setValue(conf)
+            self.on_conf_changed(conf)
+            self.statusBar().showMessage(f"Confidence threshold set to: {conf:.2f}")
+    
+    def show_lane_list_dialog(self):
+        """Show dialog with lane list"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Lane List")
+        dialog.setMinimumSize(400, 300)
+        
+        layout = QVBoxLayout()
+        
+        lane_list = QListWidget()
+        for idx, lane in enumerate(LANE_CONFIGS, start=1):
+            allowed = lane.get('allowed_labels', ['all'])
+            lane_list.addItem(f"Lane {idx}: {len(lane['poly'])} points - {', '.join(allowed)}")
+        
+        layout.addWidget(QLabel("<b>Configured Lanes:</b>"))
+        layout.addWidget(lane_list)
+        
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(dialog.close)
+        layout.addWidget(btn_close)
+        
+        dialog.setLayout(layout)
+        dialog.exec_()
+    
+    def show_direction_list_dialog(self):
+        """Show dialog with direction ROI list"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Direction ROI List")
+        dialog.setMinimumSize(500, 400)
+        
+        layout = QVBoxLayout()
+        
+        direction_list = QListWidget()
+        for idx, roi in enumerate(DIRECTION_ROIS, start=1):
+            primary_dir = roi.get('primary_direction', roi.get('direction', 'unknown')).upper()
+            secondary_dirs = roi.get('secondary_directions', [])
+            allowed_dirs = [primary_dir] + [d.upper() for d in secondary_dirs]
+            
+            # Get traffic light info
+            tl_colors = []
+            for tl_idx in roi.get('tl_ids', []):
+                if tl_idx < len(TL_ROIS):
+                    color = TL_ROIS[tl_idx].get('last_color', 'unknown')
+                    tl_colors.append(f"TL{tl_idx + 1}:{color}")
+            
+            tl_info = ' | '.join(tl_colors) if tl_colors else 'No TL'
+            points = roi.get('points', [])
+            direction_list.addItem(
+                f"ROI {idx}: {', '.join(allowed_dirs)} - {len(points)} pts - {tl_info}"
+            )
+        
+        layout.addWidget(QLabel("<b>Configured Direction ROIs:</b>"))
+        layout.addWidget(direction_list)
+        
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(dialog.close)
+        layout.addWidget(btn_close)
+        
+        dialog.setLayout(layout)
+        dialog.exec_()
+    
+    def toggle_lane_display(self):
+        """Toggle lane overlay on/off"""
+        self.show_lanes = self.action_toggle_lanes.isChecked()
+        status = "ON" if self.show_lanes else "OFF"
+        print(f"🔵 Lane display: {status}")
+        self.status_label.setText(f"Status: Lane display {status}")
+    
+    def toggle_roi_display(self):
+        """Toggle direction ROI overlay on/off"""
+        self.show_roi_overlays = self.action_toggle_rois.isChecked()
+        status = "ON" if self.show_roi_overlays else "OFF"
+        print(f"🔵 Direction ROI display: {status}")
+        self.status_label.setText(f"Status: Direction ROI display {status}")
+    
+    def show_edit_roi_dialog(self):
+        """Show dialog to select and edit a direction ROI"""
+        global DIRECTION_ROIS
+        
+        if not DIRECTION_ROIS:
+            QMessageBox.information(self, "No ROIs", "No direction ROIs configured yet. Please add ROIs first.")
+            return
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit Direction ROI")
+        dialog.setMinimumSize(500, 400)
+        
+        layout = QVBoxLayout()
+        
+        # ROI list
+        roi_list = QListWidget()
+        for idx, roi in enumerate(DIRECTION_ROIS, start=1):
+            primary_dir = roi.get('primary_direction', roi.get('direction', 'unknown')).upper()
+            secondary_dirs = roi.get('secondary_directions', [])
+            allowed_dirs = [primary_dir] + [d.upper() for d in secondary_dirs]
+            points = roi.get('points', [])
+            roi_list.addItem(f"ROI {idx}: {', '.join(allowed_dirs)} - {len(points)} points")
+        
+        layout.addWidget(QLabel("<b>Select a direction ROI to edit:</b>"))
+        layout.addWidget(roi_list)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        
+        btn_edit = QPushButton("Edit Selected")
+        btn_edit.clicked.connect(lambda: self.start_edit_selected_roi(roi_list.currentRow(), dialog))
+        btn_layout.addWidget(btn_edit)
+        
+        btn_delete = QPushButton("Delete Selected")
+        btn_delete.clicked.connect(lambda: self.delete_selected_roi(roi_list.currentRow(), dialog))
+        btn_layout.addWidget(btn_delete)
+        
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(dialog.close)
+        btn_layout.addWidget(btn_close)
+        
+        layout.addLayout(btn_layout)
+        dialog.setLayout(layout)
+        dialog.exec_()
+    
+    def start_edit_selected_roi(self, roi_idx, dialog):
+        """Start editing the selected direction ROI"""
+        global DIRECTION_ROIS
+        
+        if roi_idx < 0 or roi_idx >= len(DIRECTION_ROIS):
+            QMessageBox.warning(self, "Invalid Selection", "Please select a ROI to edit.")
+            return
+        
+        dialog.close()
+        
+        # Start ROI editor
+        self.roi_editor.start_editing(roi_idx)
+        self.action_smooth_roi.setEnabled(True)
+        self.action_change_directions.setEnabled(True)
+        self.action_finish_edit.setEnabled(True)
+        
+        print(f"✏️ Editing Direction ROI {roi_idx + 1}")
+        self.status_label.setText(f"Status: Editing ROI {roi_idx + 1} - Drag points to adjust")
+
+    
+    def delete_selected_roi(self, roi_idx, dialog):
+        """Delete the selected direction ROI"""
+        global DIRECTION_ROIS
+        
+        if roi_idx < 0 or roi_idx >= len(DIRECTION_ROIS):
+            QMessageBox.warning(self, "Invalid Selection", "Please select a ROI to delete.")
+            return
+        
+        reply = QMessageBox.question(
+            self, "Confirm Delete",
+            f"Are you sure you want to delete Direction ROI {roi_idx + 1}?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.No
+        )
+        
+        if reply == QMessageBox.Yes:
+            del DIRECTION_ROIS[roi_idx]
+            print(f"🗑️ Direction ROI {roi_idx + 1} deleted")
+            self.status_label.setText(f"Status: ROI {roi_idx + 1} deleted. Total: {len(DIRECTION_ROIS)}")
+            dialog.close()
+    
+    def update_lists(self):
+        self.lane_list.clear()
+        for idx, lane in enumerate(LANE_CONFIGS, start=1):
+            allowed = lane.get('allowed_labels', ['all'])
+            self.lane_list.addItem(f"Lane {idx}: {len(lane['poly'])} points - {', '.join(allowed)}")
+        
+        # Update direction ROI list
+        self.update_direction_roi_list()
+            
+    def start_detection(self):
+        global _detection_running
+        if not _detection_running:
+            if self.yolo_model is None:
+                self.status_label.setText("Status: Model not loaded at startup")
+                QMessageBox.warning(self, "No Model", "Please select a model first!")
+                return
+            
+            # Check if reference vector is set (critical for direction detection accuracy)
+            if self.ref_vector_p1 is None or self.ref_vector_p2 is None:
+                if DIRECTION_ROIS:  # Only warn if direction ROIs exist
+                    reply = QMessageBox.question(
+                        self,
+                        "⚠️ Reference Vector Not Set",
+                        "Reference Vector chưa được thiết lập để xác định hướng thẳng.\n\n"
+                        "Điều này CÓ THỂ ẢNH HƯỞNG ĐỘ CHÍNH XÁC khi:\n"
+                        "- Phát hiện xe rẽ trái/phải\n"
+                        "- Xác định vi phạm đèn tín hiệu theo hướng\n\n"
+                        "⚠️ Khuyến nghị: Set Reference Vector trước khi start detection\n"
+                        "(Click 'Set Reference Vector' và chọn 2 điểm theo hướng thẳng)\n\n"
+                        "Bạn có muốn tiếp tục KHÔNG CÓ Reference Vector?",
+                        QMessageBox.Yes | QMessageBox.No,
+                        QMessageBox.No
+                    )
+                    if reply == QMessageBox.No:
+                        self.status_label.setText("Status: Please set Reference Vector first")
+                        return
+            
+            # Pass pre-loaded model to thread
+            if not self.thread.model_loaded:
+                self.thread.set_model(self.yolo_model)
+                self.thread.model_config = self.current_model_config
+            
+            self.thread.detection_enabled = True
+            _detection_running = True
+            self.btn_start.setText("Stop Detection")
+            self.action_start_detection.setText("Stop Detection")
+            self.status_label.setText("Status: Detection running...")
+            print("🚀 Detection started")
+        else:
+            self.thread.detection_enabled = False
+            _detection_running = False
+            self.btn_start.setText("Start Detection")
+            self.action_start_detection.setText("Start Detection")
+            self.status_label.setText("Status: Detection stopped")
+            print("⏹️ Detection stopped")
+            VIOLATOR_TRACK_IDS.clear()
+            RED_LIGHT_VIOLATORS.clear()
+            LANE_VIOLATORS.clear()
+            PASSED_VEHICLES.clear()
+            MOTORBIKE_COUNT.clear()
+            CAR_COUNT.clear()
+    
+    def toggle_bbox_display(self):
+        global _show_all_boxes
+        # Get state from whichever control was triggered
+        sender = self.sender()
+        if isinstance(sender, QAction):
+            # Triggered from menu - update button
+            _show_all_boxes = sender.isChecked()
+            self.btn_toggle_bb.setChecked(_show_all_boxes)
+        else:
+            # Triggered from button - update menu
+            _show_all_boxes = self.btn_toggle_bb.isChecked()
+            self.action_toggle_boxes.setChecked(_show_all_boxes)
+        
+        if _show_all_boxes:
+            self.btn_toggle_bb.setText("Show All Boxes: ON")
+            self.statusBar().showMessage("Status: Showing all vehicles")
+            print("📦 Showing ALL vehicle bounding boxes")
+        else:
+            self.btn_toggle_bb.setText("Show Only Violators: ON")
+            self.statusBar().showMessage("Status: Showing only violators")
+            print("🚨 Showing ONLY violator bounding boxes")
+    
+    def select_video(self):
+        global _detection_running, VIOLATOR_TRACK_IDS, RED_LIGHT_VIOLATORS, LANE_VIOLATORS, PASSED_VEHICLES, MOTORBIKE_COUNT, CAR_COUNT
+        global ALLOWED_VEHICLE_IDS, VEHICLE_CLASSES, LANE_CONFIGS, TL_ROIS, _show_all_boxes
+        
+        file_path, _ = QFileDialog.getOpenFileName(
+            self,
+            "Select Video File",
+            "",
+            "Video Files (*.mp4 *.avi *.mov *.mkv);;All Files (*.*)"
+        )
+        
+        if file_path:
+            # Stop current thread
+            self.thread.stop()
+            
+            # Start new thread with selected video
+            self.video_path = file_path
+            self.thread = VideoThread(self.video_path)
+            self.thread.change_pixmap_signal.connect(self.update_image)
+            self.thread.error_signal.connect(self.show_error)
+            
+            # Pass globals reference to thread
+            # Use lambda for _show_all_boxes to get real-time value
+            self.thread.set_globals_reference({
+                'ALLOWED_VEHICLE_IDS': ALLOWED_VEHICLE_IDS,
+                'VEHICLE_CLASSES': VEHICLE_CLASSES,
+                'LANE_CONFIGS': LANE_CONFIGS,
+                'TL_ROIS': TL_ROIS,
+                'DIRECTION_ROIS': DIRECTION_ROIS,
+                'get_show_all_boxes': lambda: globals()['_show_all_boxes'],
+                'is_on_stop_line': is_on_stop_line,
+                'check_tl_violation': check_tl_violation,
+                'point_in_polygon': point_in_polygon,
+                'VIOLATOR_TRACK_IDS': VIOLATOR_TRACK_IDS,
+                'RED_LIGHT_VIOLATORS': RED_LIGHT_VIOLATORS,
+                'LANE_VIOLATORS': LANE_VIOLATORS,
+                'PASSED_VEHICLES': PASSED_VEHICLES,
+                'MOTORBIKE_COUNT': MOTORBIKE_COUNT,
+                'CAR_COUNT': CAR_COUNT
+            })
+            
+            self.thread.start()
+            
+            # Store cap for TL detection
+            self.cap = cv2.VideoCapture(self.video_path)
+            
+            self.status_label.setText(f"Status: Loaded {file_path.split('/')[-1]}")
+            print(f"📹 Loaded video: {file_path}")
+            
+            # Reset detection state
+            _detection_running = False
+            VIOLATOR_TRACK_IDS.clear()
+            RED_LIGHT_VIOLATORS.clear()
+            LANE_VIOLATORS.clear()
+            PASSED_VEHICLES.clear()
+            self.btn_start.setText("Start Detection")
+            
+            # Try to auto-load configuration for this video
+            if self.config_manager.config_exists(file_path):
+                print(f"🔍 Found existing configuration for this video")
+                if self.auto_load_configuration():
+                    self.config_status_label.setText(f"✅ Config: Auto-loaded from file")
+                    self.config_status_label.setStyleSheet("QLabel { color: green; font-weight: bold; }")
+                    self.status_label.setText(f"Status: Loaded {file_path.split('/')[-1]} [Config auto-loaded]")
+                    return
+            
+            # No config found - reset ROIs for new video
+            TL_ROIS.clear()
+            LANE_CONFIGS.clear()
+            DIRECTION_ROIS.clear()
+            self.lane_list.clear()
+            self.direction_roi_list.clear()
+            self.ref_vector_p1 = None
+            self.ref_vector_p2 = None
+            self.ref_vector_label.setText("Ref Vector: Not set")
+            self.tl_tracking_active = False
+            self.config_status_label.setText("Config: No saved config found")
+            self.config_status_label.setStyleSheet("QLabel { color: orange; font-style: italic; }")
+            print("♻️ All ROIs reset. Draw new configuration or load from file.")
+    
+    def show_error(self, error_msg):
+        self.status_label.setText(f"Status: Error - {error_msg}")
+        print(f"❌ Error: {error_msg}")
     
     def closeEvent(self, event):
         self.thread.stop()
