@@ -207,15 +207,16 @@ def has_crossed_stopline(cx, cy, min_distance=5):
     if not (stopline_x_min <= cx <= stopline_x_max):
         return False  # Xe ngoài phạm vi vạch dừng
     
-    # ⚠️ CRITICAL 2: CHỈ bắt xe KHI ĐÃ VƯỢT QUA vạch dừng
-    # KHÔNG bắt xe đang tiến đến vạch (cy > stopline_y)
-    # CHỈ bắt xe đã qua vạch một chút (cy < stopline_y)
+    # ⚠️ CRITICAL 2: Tâm xe phải CHẠM vạch dừng
+    # Đếm xe khi tâm xe nằm ĐÚNG trên vạch (threshold nhỏ để chính xác)
     # 
-    # Logic: Xe phải QUA vạch ít nhất 1px (cy <= stopline_y - 1)
-    # VÀ không quá xa (trong vùng min_distance pixels)
+    # Logic: |cy - stopline_y| <= 2 (tâm xe trong vùng ±2px quanh vạch)
+    # VÀ cy <= stopline_y (xe đang trên hoặc qua vạch, không phải dưới)
     
-    if cy <= stopline_y - 1:  # Xe đã qua vạch (ít nhất 1px)
-        return True
+    distance_to_stopline = abs(cy - stopline_y)
+    
+    if cy <= stopline_y and distance_to_stopline <= 2:
+        return True  # Tâm xe đang chạm vạch dừng (trong vùng 2px)
     
     return False
 
