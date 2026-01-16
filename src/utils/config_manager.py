@@ -45,7 +45,11 @@ class ConfigManager:
     def save_config(self, video_path: str, lane_configs: List[Dict], 
                    stop_line: Optional[Tuple], tl_rois: List[Tuple], 
                    direction_rois: List[Dict], 
-                   reference_vector: Optional[Tuple] = None) -> bool:
+                   reference_vector: Optional[Tuple] = None,
+                   model_type: Optional[str] = None,
+                   weight_name: Optional[str] = None,
+                   imgsz: Optional[int] = None,
+                   conf_threshold: Optional[float] = None) -> bool:
         """
         Save all ROI configurations to JSON file
         
@@ -56,6 +60,10 @@ class ConfigManager:
             tl_rois: List of traffic light ROIs
             direction_rois: List of direction zone ROIs
             reference_vector: Optional reference vector for tilted camera
+            model_type: Optional model type (e.g., 'yolov8n', 'yolov8s')
+            weight_name: Optional weight filename
+            imgsz: Optional image size for detection
+            conf_threshold: Optional confidence threshold
             
         Returns:
             True if save successful, False otherwise
@@ -71,7 +79,13 @@ class ConfigManager:
                 'stopline': self._serialize_stopline(stop_line),
                 'traffic_lights': self._serialize_traffic_lights(tl_rois),
                 'direction_zones': self._serialize_direction_zones(direction_rois),
-                'reference_vector': self._serialize_reference_vector(reference_vector)
+                'reference_vector': self._serialize_reference_vector(reference_vector),
+                'model': {
+                    'type': model_type,
+                    'weight': weight_name,
+                    'imgsz': imgsz,
+                    'conf_threshold': conf_threshold
+                }
             }
             
             # Write to file with pretty formatting
@@ -111,7 +125,8 @@ class ConfigManager:
                 'stopline': self._deserialize_stopline(config_data.get('stopline')),
                 'traffic_lights': self._deserialize_traffic_lights(config_data.get('traffic_lights', [])),
                 'direction_zones': self._deserialize_direction_zones(config_data.get('direction_zones', [])),
-                'reference_vector': self._deserialize_reference_vector(config_data.get('reference_vector'))
+                'reference_vector': self._deserialize_reference_vector(config_data.get('reference_vector')),
+                'model': config_data.get('model', {})
             }
             
             print(f"✅ Configuration loaded: {config_path}")
@@ -119,6 +134,8 @@ class ConfigManager:
             print(f"   - Stopline: {'Yes' if result['stopline'] else 'No'}")
             print(f"   - Traffic Lights: {len(result['traffic_lights'])}")
             print(f"   - Direction Zones: {len(result['direction_zones'])}")
+            if result['model']:
+                print(f"   - Model: {result['model'].get('type', 'N/A')} ({result['model'].get('weight', 'N/A')})")
             
             return result
             

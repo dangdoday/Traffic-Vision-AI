@@ -11,6 +11,10 @@ matplotlib>=3.7.0
 scikit-image>=0.21.0
 pillow>=10.0.0
 
+# OCR for license plate recognition
+paddleocr>=2.7.0
+paddlepaddle>=2.5.0  # CPU version (use paddlepaddle-gpu for GPU)
+
 # Optional but recommended
 # torch>=2.0.0  # For GPU acceleration with CUDA
 # torchvision>=0.15.0

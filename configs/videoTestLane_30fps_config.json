@@ -26,11 +26,6 @@
         "o to",
         "xe bus",
         "xe tai"
-      ],
-      "allowed_labels": [
-        "o to",
-        "xe bus",
-        "xe tai"
       ]
     },
     {
@@ -61,9 +56,6 @@
         "o to",
         "xe bus",
         "xe may"
-      ],
-      "allowed_labels": [
-        "all"
       ]
     },
     {
@@ -93,14 +85,26 @@
       "allowed_types": [
         "xe dap",
         "xe may"
-      ],
-      "allowed_labels": [
-        "xe may"
       ]
     }
   ],
-  "stopline": null,
+  "stopline": {
+    "p1": [
+      490,
+      477
+    ],
+    "p2": [
+      1575,
+      513
+    ]
+  },
   "traffic_lights": [],
   "direction_zones": [],
-  "reference_vector": null
+  "reference_vector": null,
+  "model": {
+    "type": "YOLOv8",
+    "weight": "416_vehicle_plate.pt",
+    "imgsz": 416,
+    "conf_threshold": 0.3
+  }
 }

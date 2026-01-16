@@ -13,7 +13,7 @@ MODEL_TYPES = {
     "YOLOv8": {
         "folder": "yolov8",
         "description": "YOLOv8 - Fast and accurate",
-        "classes": [0, 1, 2, 3, 4],  # ô tô, xe bus, xe đạp, xe máy, xe tải
+        "classes": [0, 1, 2, 3, 4, 5],  # ô tô, xe bus, xe đạp, xe máy, xe tải, biển số xe
         "default_imgsz": 416,
         "default_conf": 0.3
     },

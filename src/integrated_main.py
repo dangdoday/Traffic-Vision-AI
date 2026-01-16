@@ -100,8 +100,8 @@ LANE_VIOLATORS = set()
 PASSED_VEHICLES = set()  # Track vehicles that passed stop line
 MOTORBIKE_COUNT = set()  # Track motorbikes (xe máy)
 CAR_COUNT = set()  # Track cars/trucks/buses (ô tô, xe tải, xe bus)
-VEHICLE_CLASSES = {0: "o to", 1: "xe bus", 2: "xe dap", 3: "xe may", 4: "xe tai"}  # Custom model classes
-ALLOWED_VEHICLE_IDS = [0, 1, 2, 3, 4]
+VEHICLE_CLASSES = {0: "o to", 1: "xe bus", 2: "xe dap", 3: "xe may", 4: "xe tai", 5: "bien so xe"}  # Custom model classes
+ALLOWED_VEHICLE_IDS = [0, 1, 2, 3, 4, 5]
 
 def is_on_stop_line(cx, cy, threshold=15):
     """Check if point is on THE stopline"""
@@ -669,17 +669,24 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         # === SETTINGS Menu ===
         settings_menu = menubar.addMenu("⚙️ &Settings")
         
-        # Model selection submenu
+        # Model selection submenu with weights
         model_menu = settings_menu.addMenu("🤖 Model Selection")
         
-        # Will be populated dynamically
+        # Create submenu for each model type with all weights
         self.model_type_actions = []
         for model_type, info in self.available_models.items():
-            action = QAction(f"{model_type} - {info['config']['description']}", self)
-            action.setData(model_type)
-            action.triggered.connect(lambda checked, mt=model_type: self.load_model_from_menu(mt))
-            model_menu.addAction(action)
-            self.model_type_actions.append(action)
+            # Create submenu for this model type
+            type_menu = model_menu.addMenu(f"{model_type} - {info['config']['description']}")
+            
+            # Add action for each weight file
+            for weight in info['weights']:
+                weight_action = QAction(weight, self)
+                weight_action.triggered.connect(
+                    lambda checked, mt=model_type, wt=weight: self.load_model(mt, wt)
+                )
+                type_menu.addAction(weight_action)
+            
+            self.model_type_actions.append(type_menu)
         
         settings_menu.addSeparator()
         
@@ -696,6 +703,33 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         action_conf.triggered.connect(self.show_conf_dialog)
         params_menu.addAction(action_conf)
         
+        settings_menu.addSeparator()
+        
+        # License plate tracking mode
+        plate_menu = settings_menu.addMenu("🎫 License Plate Tracking")
+        
+        self.action_plate_yolo_direct = QAction("YOLO Direct Detection", self)
+        self.action_plate_yolo_direct.setCheckable(True)
+        self.action_plate_yolo_direct.setChecked(False)
+        self.action_plate_yolo_direct.triggered.connect(self.set_plate_mode_yolo)
+        plate_menu.addAction(self.action_plate_yolo_direct)
+        
+        self.action_plate_relative = QAction("Relative Position Tracking (Recommended)", self)
+        self.action_plate_relative.setCheckable(True)
+        self.action_plate_relative.setChecked(True)
+        self.action_plate_relative.triggered.connect(self.set_plate_mode_relative)
+        plate_menu.addAction(self.action_plate_relative)
+        
+        plate_menu.addSeparator()
+        
+        # Info text
+        action_plate_info = QAction("💡 YOLO: Let model detect plates directly", self)
+        action_plate_info.setEnabled(False)
+        plate_menu.addAction(action_plate_info)
+        
+        action_plate_info2 = QAction("💡 Relative: Track plate position within vehicle", self)
+        action_plate_info2.setEnabled(False)
+        plate_menu.addAction(action_plate_info2)
 
         
         # === DETECTION Menu ===
@@ -734,6 +768,28 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
     # NOTE: toggle_bbox_display moved to DisplayHandlerMixin
     # NOTE: select_video moved to VideoHandlerMixin
     # NOTE: show_error moved to VideoHandlerMixin
+    
+    def set_plate_mode_yolo(self):
+        """Set license plate tracking mode to YOLO direct detection"""
+        self.action_plate_yolo_direct.setChecked(True)
+        self.action_plate_relative.setChecked(False)
+        
+        if hasattr(self, 'thread') and self.thread:
+            self.thread.use_plate_relative_tracking = False
+            print("🔹 License Plate Mode: YOLO Direct Detection")
+        
+        self.statusBar().showMessage("License Plate: YOLO Direct Detection", 3000)
+    
+    def set_plate_mode_relative(self):
+        """Set license plate tracking mode to relative position tracking"""
+        self.action_plate_yolo_direct.setChecked(False)
+        self.action_plate_relative.setChecked(True)
+        
+        if hasattr(self, 'thread') and self.thread:
+            self.thread.use_plate_relative_tracking = True
+            print("🟠 License Plate Mode: Relative Position Tracking")
+        
+        self.statusBar().showMessage("License Plate: Relative Position Tracking", 3000)
     
     def closeEvent(self, event):
         self.thread.stop()
