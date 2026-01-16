@@ -3,6 +3,7 @@ Model Handler Mixin
 Contains methods for YOLO model loading and configuration management
 """
 from PyQt5.QtWidgets import QMessageBox
+import torch
 
 
 class ModelHandlerMixin:
@@ -35,6 +36,12 @@ class ModelHandlerMixin:
             print(f"🔄 Loading {model_type} model: {weight_name}...")
             weight_path = get_weight_path(model_type, weight_name)
             self.yolo_model = YOLO(weight_path)
+            
+            # Move model to selected device (GPU or CPU)
+            device = getattr(self, 'device', 'cuda:0' if torch.cuda.is_available() else 'cpu')
+            self.yolo_model.to(device)
+            print(f"📦 Model loaded on device: {device}")
+            
             self.current_model_type = model_type
             self.current_model_config = get_model_config(model_type)
             

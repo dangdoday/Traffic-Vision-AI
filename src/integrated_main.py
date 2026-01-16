@@ -18,6 +18,14 @@ from PyQt5.QtCore import QThread, pyqtSignal, QTimer, Qt
 from PyQt5.QtGui import QImage, QPixmap, QCursor
 from ui.lane_selector import VehicleTypeDialog
 import torch
+
+# Check CUDA availability
+CUDA_AVAILABLE = torch.cuda.is_available()
+if CUDA_AVAILABLE:
+    print(f"✅ CUDA available: {torch.cuda.get_device_name(0)}")
+else:
+    print("⚠️ CUDA not available, will use CPU")
+
 from model_config import scan_all_models, get_weight_path, get_model_config, migrate_old_weights
 
 # Import core OOP modules
@@ -158,6 +166,8 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         self.yolo_model = None
         self.current_model_type = None
         self.current_model_config = None
+        self.device = 'cuda:0' if CUDA_AVAILABLE else 'cpu'  # Default device
+        print(f"📦 Default device: {self.device}")
         
         # Try to migrate old weights first
         migrate_old_weights()
@@ -730,6 +740,35 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         action_plate_info2 = QAction("💡 Relative: Track plate position within vehicle", self)
         action_plate_info2.setEnabled(False)
         plate_menu.addAction(action_plate_info2)
+        
+        settings_menu.addSeparator()
+        
+        # Device selection (GPU/CPU)
+        device_menu = settings_menu.addMenu("💻 Device Selection")
+        
+        self.action_device_gpu = QAction("🚀 GPU (CUDA)", self)
+        self.action_device_gpu.setCheckable(True)
+        self.action_device_gpu.setEnabled(CUDA_AVAILABLE)  # Only enable if CUDA available
+        self.action_device_gpu.setChecked(CUDA_AVAILABLE)  # Default to GPU if available
+        self.action_device_gpu.triggered.connect(self.set_device_gpu)
+        device_menu.addAction(self.action_device_gpu)
+        
+        self.action_device_cpu = QAction("🐌 CPU", self)
+        self.action_device_cpu.setCheckable(True)
+        self.action_device_cpu.setChecked(not CUDA_AVAILABLE)  # Default to CPU if no CUDA
+        self.action_device_cpu.triggered.connect(self.set_device_cpu)
+        device_menu.addAction(self.action_device_cpu)
+        
+        device_menu.addSeparator()
+        
+        # Info text
+        if CUDA_AVAILABLE:
+            gpu_name = torch.cuda.get_device_name(0)
+            action_device_info = QAction(f"💡 Available: {gpu_name}", self)
+        else:
+            action_device_info = QAction("⚠️ No CUDA-capable GPU detected", self)
+        action_device_info.setEnabled(False)
+        device_menu.addAction(action_device_info)
 
         
         # === DETECTION Menu ===
@@ -790,6 +829,43 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
             print("🟠 License Plate Mode: Relative Position Tracking")
         
         self.statusBar().showMessage("License Plate: Relative Position Tracking", 3000)
+    
+    def set_device_gpu(self):
+        """Set device to GPU (CUDA)"""
+        if not CUDA_AVAILABLE:
+            QMessageBox.warning(self, "GPU Not Available", 
+                              "CUDA-capable GPU not detected!\nPlease install CUDA and compatible PyTorch.")
+            return
+        
+        self.action_device_gpu.setChecked(True)
+        self.action_device_cpu.setChecked(False)
+        self.device = 'cuda:0'
+        print(f"🚀 Device set to: GPU (CUDA) - {torch.cuda.get_device_name(0)}")
+        
+        # Reload model on new device if already loaded
+        if self.yolo_model is not None:
+            self.yolo_model.to(self.device)
+            if hasattr(self, 'thread') and self.thread:
+                self.thread.set_model(self.yolo_model)
+            print(f"✅ Model moved to {self.device}")
+        
+        self.statusBar().showMessage(f"Device: GPU ({torch.cuda.get_device_name(0)})", 3000)
+    
+    def set_device_cpu(self):
+        """Set device to CPU"""
+        self.action_device_gpu.setChecked(False)
+        self.action_device_cpu.setChecked(True)
+        self.device = 'cpu'
+        print("🐌 Device set to: CPU")
+        
+        # Reload model on new device if already loaded
+        if self.yolo_model is not None:
+            self.yolo_model.to(self.device)
+            if hasattr(self, 'thread') and self.thread:
+                self.thread.set_model(self.yolo_model)
+            print(f"✅ Model moved to {self.device}")
+        
+        self.statusBar().showMessage("Device: CPU", 3000)
     
     def closeEvent(self, event):
         self.thread.stop()
