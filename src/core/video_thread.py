@@ -58,18 +58,36 @@ class VideoThread(QThread):
         self.vehicle_plate_positions = {}
         self.update_interval = 30  # Update relative position every 30 frames
         self.current_frame_count = 0
-        self.use_plate_relative_tracking = True  # Toggle between YOLO direct vs relative tracking
+        self.use_plate_relative_tracking = False  # Toggle between YOLO direct vs relative tracking (Default: YOLO Direct)
+        
+        # YOLO Direct mode: Store OCR text for each vehicle
+        # Format: {vehicle_track_id: 'plate_text'}
+        self.vehicle_ocr_texts = {}
+        
+        # YOLO Direct mode: Map vehicle track_id to plate track_id
+        # Format: {vehicle_track_id: plate_track_id}
+        self.vehicle_to_plate_map = {}
         
         # Initialize PaddleOCR
         self.ocr = None
         self.enable_ocr = True  # Toggle OCR on/off
         if PADDLE_OCR_AVAILABLE and self.enable_ocr:
             try:
+                # Suppress minor warnings during PaddleOCR initialization
+                import sys
+                import io
+                old_stderr = sys.stderr
+                sys.stderr = io.StringIO()  # Temporarily redirect stderr
+                
                 # use_textline_orientation=True: detect rotated text
                 # lang='en': English (use 'ch' for Chinese, 'latin' for Latin scripts)
                 self.ocr = PaddleOCR(use_textline_orientation=True, lang='en')
+                
+                # Restore stderr
+                sys.stderr = old_stderr
                 print("✅ PaddleOCR initialized for license plate recognition")
             except Exception as e:
+                sys.stderr = old_stderr  # Restore stderr on error too
                 print(f"⚠️ Failed to initialize PaddleOCR: {e}")
                 self.ocr = None
         
@@ -79,6 +97,30 @@ class VideoThread(QThread):
     def set_globals_reference(self, globals_dict):
         """Set reference to global state dictionary"""
         self.globals_ref = globals_dict
+    def preprocess_plate(self, img):
+        """Advanced preprocessing for better OCR - from Traffic-Vision-AI reference"""
+        # 1. Resize to height 100px
+        h, w = img.shape[:2]
+        if h < 100:
+            scale = 100 / h
+            img = cv2.resize(img, (int(w * scale), 100), interpolation=cv2.INTER_CUBIC)
+        
+        # 2. Grayscale
+        if len(img.shape) == 3:
+            img = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
+        
+        # 3. CLAHE contrast enhancement
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8))
+        img = clahe.apply(img)
+        
+        # 4. Bilateral filter (noise reduction while preserving edges)
+        img = cv2.bilateralFilter(img, 5, 75, 75)
+        
+        # 5. Sharpen
+        kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+        img = cv2.filter2D(img, -1, kernel)
+        
+        return img
     
     def recognize_plate_text(self, frame_original, plate_bbox):
         """Run OCR on license plate region from original frame
@@ -109,20 +151,31 @@ class VideoThread(QThread):
             if plate_img.size == 0:
                 return ""
             
-            # Run OCR
-            result = self.ocr.predict(plate_img)
+            # Preprocess for better OCR
+            processed = self.preprocess_plate(plate_img)
             
-            if result and result[0]:
-                # Extract text from all detected lines
-                texts = []
-                for line in result[0]:
-                    if line[1][0]:  # Check if text exists
-                        text = line[1][0].strip()
-                        conf = line[1][1]
-                        if conf > 0.5:  # Only keep high confidence
-                            texts.append(text)
-                
-                return ' '.join(texts) if texts else ""
+            # Convert grayscale back to BGR for PaddleOCR
+            if len(processed.shape) == 2:
+                processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
+            
+            # Run OCR
+            result = self.ocr.predict(processed)
+            
+            # New PaddleOCR format returns dict with 'rec_texts' key
+            if result and len(result) > 0:
+                result_dict = result[0]
+                if isinstance(result_dict, dict) and 'rec_texts' in result_dict:
+                    texts = result_dict['rec_texts']
+                    scores = result_dict.get('rec_scores', [])
+                    
+                    # Filter by confidence and join
+                    filtered_texts = []
+                    for i, text in enumerate(texts):
+                        conf = scores[i] if i < len(scores) else 1.0
+                        if conf > 0.5:  # Min confidence threshold
+                            filtered_texts.append(str(text).strip())
+                    
+                    return "".join(filtered_texts).replace(" ", "").replace(".", "")
             
             return ""
             
@@ -345,21 +398,12 @@ class VideoThread(QThread):
                     track_id = int(box.id[0]) if box.id is not None else -1
                     
                     if cls_id == 5:  # License plate
-                        if self.use_plate_relative_tracking:
-                            # Relative tracking mode: separate plates
-                            license_plates.append({
-                                "track_id": track_id,
-                                "box": (x1, y1, x2, y2),
-                                "conf": conf_val
-                            })
-                        else:
-                            # YOLO direct mode: treat plates as normal vehicles
-                            vehicles.append({
-                                "track_id": track_id,
-                                "cls_id": cls_id,
-                                "box": (x1, y1, x2, y2),
-                                "conf": conf_val
-                            })
+                        # Always separate plates for mapping to vehicles
+                        license_plates.append({
+                            "track_id": track_id,
+                            "box": (x1, y1, x2, y2),
+                            "conf": conf_val
+                        })
                     else:  # Vehicle (not plate)
                         vehicles.append({
                             "track_id": track_id,
@@ -368,10 +412,9 @@ class VideoThread(QThread):
                             "conf": conf_val
                         })
         
-        # === MAP LICENSE PLATES TO VEHICLES (RELATIVE POSITION) ===
-        # Only do mapping if relative tracking mode is enabled
-        if self.use_plate_relative_tracking:
-            self.current_frame_count += 1
+        # === MAP LICENSE PLATES TO VEHICLES ===
+        # Works for both YOLO Direct and Relative Tracking modes
+        self.current_frame_count += 1
         
         current_vehicle_ids = set()
         for veh in vehicles:
@@ -386,19 +429,8 @@ class VideoThread(QThread):
             plate_w = plate_x2 - plate_x1
             plate_h = plate_y2 - plate_y1
             
-            # Expand plate bbox by 40% for better matching when vehicle bbox changes
-            # This creates a tolerance zone to catch plates even when vehicle bbox fluctuates
-            expand_ratio = 0.40
-            expand_w = plate_w * expand_ratio
-            expand_h = plate_h * expand_ratio
-            plate_x1_expanded = plate_x1 - expand_w / 2
-            plate_y1_expanded = plate_y1 - expand_h / 2
-            plate_x2_expanded = plate_x2 + expand_w / 2
-            plate_y2_expanded = plate_y2 + expand_h / 2
-            
-            # Find which vehicle contains this plate
+            # Find which vehicle contains this plate (100% inside)
             best_match = None
-            best_overlap = 0
             
             for veh in vehicles:
                 veh_x1, veh_y1, veh_x2, veh_y2 = veh["box"]
@@ -407,30 +439,16 @@ class VideoThread(QThread):
                 if veh_track_id == -1:
                     continue
                 
-                # Check if plate center is inside vehicle bbox
-                if veh_x1 <= plate_cx <= veh_x2 and veh_y1 <= plate_cy <= veh_y2:
-                    # Calculate overlap score using EXPANDED plate bbox
-                    overlap_x1 = max(plate_x1_expanded, veh_x1)
-                    overlap_y1 = max(plate_y1_expanded, veh_y1)
-                    overlap_x2 = min(plate_x2_expanded, veh_x2)
-                    overlap_y2 = min(plate_y2_expanded, veh_y2)
-                    
-                    if overlap_x2 > overlap_x1 and overlap_y2 > overlap_y1:
-                        overlap_area = (overlap_x2 - overlap_x1) * (overlap_y2 - overlap_y1)
-                        # Use expanded plate area for ratio calculation
-                        plate_area_expanded = (plate_x2_expanded - plate_x1_expanded) * (plate_y2_expanded - plate_y1_expanded)
-                        overlap_ratio = overlap_area / plate_area_expanded if plate_area_expanded > 0 else 0
-                        
-                        if overlap_ratio > best_overlap:
-                            best_overlap = overlap_ratio
-                            best_match = veh
+                # ✅ STRICT CHECK: Plate must be 100% inside vehicle bbox
+                # All 4 corners of plate must be within vehicle bounds
+                if (plate_x1 >= veh_x1 and plate_x2 <= veh_x2 and 
+                    plate_y1 >= veh_y1 and plate_y2 <= veh_y2):
+                    # Plate is completely inside this vehicle
+                    best_match = veh
+                    break  # Found valid match, no need to check others
             
-            # If found matching vehicle, calculate and store relative position
-            # OVERLAP THRESHOLD (0.5 = 50%): Minimum percentage of plate area that must be inside vehicle bbox
-            # - Too low (e.g., 0.1): Risk assigning plate to wrong vehicle (false positive)
-            # - Too high (e.g., 0.9): May miss valid plates when bbox changes (false negative)
-            # - 0.5 (50%): Good balance - plate must be mostly inside vehicle to be assigned
-            if best_match and best_overlap > 0.5:  # At least 50% overlap required
+            # If found matching vehicle (plate 100% inside)
+            if best_match:
                 veh_track_id = best_match["track_id"]
                 veh_x1, veh_y1, veh_x2, veh_y2 = best_match["box"]
                 
@@ -438,55 +456,89 @@ class VideoThread(QThread):
                 veh_h = veh_y2 - veh_y1
                 
                 if veh_w > 0 and veh_h > 0:
-                    # Check if we should update (first time OR 30 frames passed)
-                    should_update = False
-                    if veh_track_id not in self.vehicle_plate_positions:
-                        should_update = True  # First detection
-                    else:
-                        last_updated = self.vehicle_plate_positions[veh_track_id].get('last_updated_frame', 0)
-                        frames_since_update = self.current_frame_count - last_updated
-                        if frames_since_update >= self.update_interval:
-                            should_update = True  # Time to refresh
-                    
-                    if should_update:
-                        # Calculate relative position for x,y (0.0 to 1.0)
-                        x_ratio = (plate_x1 - veh_x1) / veh_w
-                        y_ratio = (plate_y1 - veh_y1) / veh_h
+                    # === YOLO DIRECT MODE: Just run OCR and store text ===
+                    if not self.use_plate_relative_tracking:
+                        # Map vehicle to plate track_id
+                        plate_track_id = plate["track_id"]
+                        self.vehicle_to_plate_map[veh_track_id] = plate_track_id
                         
-                        # Store ABSOLUTE size (not ratio) to keep plate size constant
-                        abs_w = int(plate_w)
-                        abs_h = int(plate_h)
+                        # Debug: Print mapping info
+                        print(f"📍 Mapped Plate ID:{plate_track_id} → Vehicle ID:{veh_track_id}")
                         
-                        # Run OCR on plate ONLY if this vehicle doesn't have text yet
-                        ocr_text = ""
-                        if veh_track_id in self.vehicle_plate_positions:
-                            # Keep existing OCR text if available
-                            ocr_text = self.vehicle_plate_positions[veh_track_id].get('ocr_text', '')
-                        
-                        # Only run OCR if no text exists yet
-                        if not ocr_text and self.ocr is not None:
-                            plate_bbox = (int(plate_x1), int(plate_y1), int(plate_x2), int(plate_y2))
-                            ocr_text = self.recognize_plate_text(frame_original, plate_bbox)
-                            if ocr_text:
-                                print(f"🔤 OCR Vehicle ID:{veh_track_id} → '{ocr_text}'")
+                        # Check if vehicle already has OCR text
+                        if veh_track_id not in self.vehicle_ocr_texts:
+                            print(f"🔍 Attempting OCR for Vehicle ID:{veh_track_id} (ocr={self.ocr is not None}, enable_ocr={self.enable_ocr})")
+                            # Run OCR on plate (crop from original frame)
+                            if self.ocr is not None and self.enable_ocr:
+                                plate_bbox = (int(plate_x1), int(plate_y1), int(plate_x2), int(plate_y2))
+                                ocr_text = self.recognize_plate_text(frame_original, plate_bbox)
+                                if ocr_text:
+                                    self.vehicle_ocr_texts[veh_track_id] = ocr_text
+                                    print(f"🔤 OCR [YOLO Direct] Vehicle ID:{veh_track_id} → '{ocr_text}'")
+                                else:
+                                    self.vehicle_ocr_texts[veh_track_id] = ""  # Mark as attempted
+                                    print(f"⚠️ OCR [YOLO Direct] Vehicle ID:{veh_track_id} → No text detected")
                             else:
-                                print(f"⚠️ OCR Vehicle ID:{veh_track_id} → No text detected")
+                                print(f"❌ OCR disabled or not initialized")
+                    
+                    # === RELATIVE TRACKING MODE: Calculate position and run OCR ===
+                    else:
+                        # Check if we should update (first time OR 30 frames passed)
+                        should_update = False
+                        if veh_track_id not in self.vehicle_plate_positions:
+                            should_update = True  # First detection
+                        else:
+                            last_updated = self.vehicle_plate_positions[veh_track_id].get('last_updated_frame', 0)
+                            frames_since_update = self.current_frame_count - last_updated
+                            if frames_since_update >= self.update_interval:
+                                should_update = True  # Time to refresh
                         
-                        # Store or update relative position
-                        self.vehicle_plate_positions[veh_track_id] = {
-                            'x_ratio': x_ratio,
-                            'y_ratio': y_ratio,
-                            'abs_w': abs_w,  # Absolute width (pixels)
-                            'abs_h': abs_h,  # Absolute height (pixels)
-                            'conf': plate["conf"],
-                            'last_updated_frame': self.current_frame_count,
-                            'ocr_text': ocr_text  # OCR recognized text
-                        }
+                        if should_update:
+                            # Calculate relative position for x,y (0.0 to 1.0)
+                            x_ratio = (plate_x1 - veh_x1) / veh_w
+                            y_ratio = (plate_y1 - veh_y1) / veh_h
+                            
+                            # Store ABSOLUTE size (not ratio) to keep plate size constant
+                            abs_w = int(plate_w)
+                            abs_h = int(plate_h)
+                            
+                            # Run OCR on plate ONLY if this vehicle doesn't have text yet
+                            ocr_text = ""
+                            if veh_track_id in self.vehicle_plate_positions:
+                                # Keep existing OCR text if available
+                                ocr_text = self.vehicle_plate_positions[veh_track_id].get('ocr_text', '')
+                            
+                            # Only run OCR if no text exists yet AND OCR is enabled
+                            if not ocr_text and self.ocr is not None and self.enable_ocr:
+                                plate_bbox = (int(plate_x1), int(plate_y1), int(plate_x2), int(plate_y2))
+                                ocr_text = self.recognize_plate_text(frame_original, plate_bbox)
+                                if ocr_text:
+                                    print(f"🔤 OCR [Relative] Vehicle ID:{veh_track_id} → '{ocr_text}'")
+                            
+                            # Store or update relative position
+                            self.vehicle_plate_positions[veh_track_id] = {
+                                'x_ratio': x_ratio,
+                                'y_ratio': y_ratio,
+                                'abs_w': abs_w,  # Absolute width (pixels)
+                                'abs_h': abs_h,  # Absolute height (pixels)
+                                'conf': plate["conf"],
+                                'last_updated_frame': self.current_frame_count,
+                                'ocr_text': ocr_text  # OCR recognized text
+                            }
         
-            # Clean up plates for vehicles that are no longer tracked
+        # Clean up plates for vehicles that are no longer tracked
+        if self.use_plate_relative_tracking:
             for veh_id in list(self.vehicle_plate_positions.keys()):
                 if veh_id not in current_vehicle_ids:
                     del self.vehicle_plate_positions[veh_id]
+        else:
+            # YOLO Direct mode cleanup
+            for veh_id in list(self.vehicle_ocr_texts.keys()):
+                if veh_id not in current_vehicle_ids:
+                    del self.vehicle_ocr_texts[veh_id]
+            for veh_id in list(self.vehicle_to_plate_map.keys()):
+                if veh_id not in current_vehicle_ids:
+                    del self.vehicle_to_plate_map[veh_id]
         
         # Process vehicles with direction detection
         for veh in vehicles:
@@ -570,8 +622,35 @@ class VideoThread(QThread):
                 if show_as_violator:
                     label_text += " [VIOLATOR]"
                 
-                # Draw license plate if we have relative position for this vehicle (only in relative tracking mode)
-                if self.use_plate_relative_tracking and track_id in self.vehicle_plate_positions:
+                # === Show OCR text and draw plate for YOLO Direct mode ===
+                if not self.use_plate_relative_tracking:
+                    # Find plate by track_id in current detections
+                    if track_id in self.vehicle_to_plate_map:
+                        plate_track_id = self.vehicle_to_plate_map[track_id]
+                        # Search for this plate in current license_plates list
+                        for plate in license_plates:
+                            if plate["track_id"] == plate_track_id:
+                                # Found! Use current bbox from YOLO detection
+                                plate_x1, plate_y1, plate_x2, plate_y2 = plate["box"]
+                                # Draw plate box in green (YOLO Direct)
+                                cv2.rectangle(frame, (plate_x1, plate_y1), (plate_x2, plate_y2), (0, 255, 0), 2)
+                                
+                                # Draw OCR text near plate if available
+                                if track_id in self.vehicle_ocr_texts:
+                                    ocr_text = self.vehicle_ocr_texts[track_id]
+                                    if ocr_text:
+                                        cv2.putText(frame, ocr_text, (plate_x1, plate_y1 - 5),
+                                                   cv2.FONT_HERSHEY_SIMPLEX, 0.6, (0, 255, 0), 2)
+                                break
+                    
+                    # Add OCR text to vehicle label
+                    if track_id in self.vehicle_ocr_texts:
+                        ocr_text = self.vehicle_ocr_texts[track_id]
+                        if ocr_text:
+                            label_text += f" [{ocr_text}]"
+                
+                # === Draw license plate if we have relative position (Relative Tracking mode only) ===
+                elif self.use_plate_relative_tracking and track_id in self.vehicle_plate_positions:
                     plate_info = self.vehicle_plate_positions[track_id]
                     
                     # Calculate absolute position from relative position (x,y move with vehicle)

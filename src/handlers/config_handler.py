@@ -164,6 +164,25 @@ class ConfigHandlerMixin:
         main.TL_ROIS.clear()
         main.TL_ROIS.extend(config['traffic_lights'])
         
+        # ⚠️ CRITICAL: Enable TL tracking and update colors from current frame
+        if len(main.TL_ROIS) > 0:
+            self.tl_tracking_active = True
+            print(f"✅ Loaded {len(main.TL_ROIS)} traffic lights, tracking enabled")
+            
+            # Update colors immediately if we have a current frame
+            if self.current_frame is not None:
+                # Force immediate update by resetting frame counter
+                self.tl_force_update_on_next_frame = True
+                self.update_tl_colors(self.current_frame)
+                print("🎨 Traffic light colors updated from current frame")
+            else:
+                # Set flag to force update on first frame
+                self.tl_force_update_on_next_frame = True
+                print("⚠️ No current frame available, will force update colors on next frame")
+        else:
+            self.tl_tracking_active = False
+            print("ℹ️ No traffic lights in config")
+        
         # Load direction zones
         main.DIRECTION_ROIS.clear()
         main.DIRECTION_ROIS.extend(config['direction_zones'])

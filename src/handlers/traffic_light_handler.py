@@ -22,11 +22,18 @@ class TrafficLightHandlerMixin:
         if not self.tl_tracking_active or not main.TL_ROIS:
             return
         
-        # Only update color every 10 frames for performance
-        self.tl_color_frame_count += 1
-        if self.tl_color_frame_count < 10:
-            return
-        self.tl_color_frame_count = 0
+        # Force update if flag is set (e.g., after loading config)
+        force_update = getattr(self, 'tl_force_update_on_next_frame', False)
+        if force_update:
+            self.tl_force_update_on_next_frame = False
+            self.tl_color_frame_count = 0
+            print("🎨 Force updating TL colors immediately after config load")
+        else:
+            # Only update color every 10 frames for performance
+            self.tl_color_frame_count += 1
+            if self.tl_color_frame_count < 10:
+                return
+            self.tl_color_frame_count = 0
         
         updated_rois = []
         

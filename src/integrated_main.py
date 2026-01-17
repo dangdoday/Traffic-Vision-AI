@@ -3,6 +3,11 @@ import cv2
 import numpy as np
 import os
 import math
+import warnings
+
+# Suppress minor warnings from dependencies
+warnings.filterwarnings('ignore', category=UserWarning)
+warnings.filterwarnings('ignore', message='.*Could not find files.*')
 
 # CRITICAL: Import YOLO BEFORE PyQt to avoid DLL conflicts
 try:
@@ -190,6 +195,7 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         # Initialize TL tracking (manual ROI only, no auto-detection)
         self.tl_tracking_active = False  # Continuous color tracking flag
         self.tl_color_frame_count = 0  # Counter for color update throttling
+        self.tl_force_update_on_next_frame = False  # Force immediate color update flag
         self.cap = None  # Will be set when video loads
         print("✅ Manual TL ROI mode enabled")
         
@@ -718,15 +724,15 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         # License plate tracking mode
         plate_menu = settings_menu.addMenu("🎫 License Plate Tracking")
         
-        self.action_plate_yolo_direct = QAction("YOLO Direct Detection", self)
+        self.action_plate_yolo_direct = QAction("YOLO Direct Detection (Default)", self)
         self.action_plate_yolo_direct.setCheckable(True)
-        self.action_plate_yolo_direct.setChecked(False)
+        self.action_plate_yolo_direct.setChecked(True)
         self.action_plate_yolo_direct.triggered.connect(self.set_plate_mode_yolo)
         plate_menu.addAction(self.action_plate_yolo_direct)
         
-        self.action_plate_relative = QAction("Relative Position Tracking (Recommended)", self)
+        self.action_plate_relative = QAction("Relative Position Tracking", self)
         self.action_plate_relative.setCheckable(True)
-        self.action_plate_relative.setChecked(True)
+        self.action_plate_relative.setChecked(False)
         self.action_plate_relative.triggered.connect(self.set_plate_mode_relative)
         plate_menu.addAction(self.action_plate_relative)
         
@@ -740,6 +746,15 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         action_plate_info2 = QAction("💡 Relative: Track plate position within vehicle", self)
         action_plate_info2.setEnabled(False)
         plate_menu.addAction(action_plate_info2)
+        
+        settings_menu.addSeparator()
+        
+        # OCR toggle
+        self.action_toggle_ocr = QAction("🔤 Enable OCR (License Plate Text Recognition)", self)
+        self.action_toggle_ocr.setCheckable(True)
+        self.action_toggle_ocr.setChecked(True)  # Default ON
+        self.action_toggle_ocr.triggered.connect(self.toggle_ocr)
+        settings_menu.addAction(self.action_toggle_ocr)
         
         settings_menu.addSeparator()
         
@@ -828,8 +843,22 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
             self.thread.use_plate_relative_tracking = True
             print("🟠 License Plate Mode: Relative Position Tracking")
         
-        self.statusBar().showMessage("License Plate: Relative Position Tracking", 3000)
-    
+        self.statusBar().showMessage("License Plate: Relative Position Tracking", 3000)    
+    def toggle_ocr(self):
+        """Toggle OCR (License Plate Text Recognition) on/off"""
+        is_enabled = self.action_toggle_ocr.isChecked()
+        
+        if hasattr(self, 'thread') and self.thread:
+            self.thread.enable_ocr = is_enabled
+            
+            if is_enabled:
+                print("✅ OCR Enabled: License plate text will be recognized")
+                self.statusBar().showMessage("OCR: Enabled ✅", 3000)
+                self.action_toggle_ocr.setText("🔤 Disable OCR (License Plate Text Recognition)")
+            else:
+                print("⏸️ OCR Disabled: License plate text recognition turned off")
+                self.statusBar().showMessage("OCR: Disabled ⏸️", 3000)
+                self.action_toggle_ocr.setText("🔤 Enable OCR (License Plate Text Recognition)")    
     def set_device_gpu(self):
         """Set device to GPU (CUDA)"""
         if not CUDA_AVAILABLE:
