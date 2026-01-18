@@ -1,0 +1,33 @@
+{
+  "video_name": "video3.mp4",
+  "video_path": "D:/test adcv/video3.mp4",
+  "lanes": [],
+  "stopline": {
+    "p1": [
+      289,
+      249
+    ],
+    "p2": [
+      682,
+      225
+    ]
+  },
+  "traffic_lights": [
+    {
+      "x1": 643,
+      "y1": 83,
+      "x2": 659,
+      "y2": 121,
+      "type": "đi thẳng",
+      "color": "đỏ"
+    }
+  ],
+  "direction_zones": [],
+  "reference_vector": null,
+  "model": {
+    "type": "YOLOv8",
+    "weight": "416_vehicle_plate.pt",
+    "imgsz": 416,
+    "conf_threshold": 0.3
+  }
+}

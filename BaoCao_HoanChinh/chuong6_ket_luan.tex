@@ -1,0 +1,162 @@
+\chapter{Kết luận và Hướng phát triển}
+\label{ch:ket_luan}
+
+\section{Kết luận}
+
+Đề tài \textbf{``Hệ thống giám sát giao thông thông minh và nhận diện biển số xe Việt Nam''} đã hoàn thành việc xây dựng một hệ thống hoàn chỉnh với các thành phần chính:
+
+\subsection{Những đóng góp chính}
+
+\begin{itemize}
+    \item \textbf{Xây dựng thành công hệ thống hoàn chỉnh:} Phát triển ứng dụng PyQt5 với đầy đủ tính năng từ giám sát luồng giao thông, theo dõi phương tiện, phát hiện vi phạm tự động đến nhận diện biển số xe.
+    
+    \item \textbf{Mô hình YOLOv8 được tối ưu hóa:}
+    \begin{itemize}
+        \item Mô hình phát hiện phương tiện đạt mAP@50 = 86.1\% trên dữ liệu thực tế Việt Nam
+        \item Mô hình phát hiện biển số đạt mAP@50 = 99.5\% và Precision = 99.97\%
+        \item Cả hai mô hình đều nhẹ (YOLOv8n với 3.0M parameters), phù hợp cho ứng dụng realtime
+    \end{itemize}
+    
+    \item \textbf{Thuật toán phát hiện vi phạm thông minh:}
+    \begin{itemize}
+        \item Phát hiện vượt đèn đỏ dựa trên phân tích quỹ đạo và hướng di chuyển với ngưỡng 50°
+        \item Phát hiện đi sai làn thông qua vector tham chiếu và logic hình học
+        \item Cơ chế Direction Fusion kết hợp Trajectory Analysis và ROI-based Direction
+    \end{itemize}
+    
+    \item \textbf{Pipeline OCR biển số hoàn chỉnh:}
+    \begin{itemize}
+        \item Tích hợp PaddleOCR với GPU acceleration
+        \item Áp dụng tiền xử lý CLAHE + Sharpening để cải thiện chất lượng ảnh
+        \item Xây dựng logic Character Correction cho định dạng biển số Việt Nam
+        \item Cơ chế Voting \& Lock đảm bảo kết quả ổn định
+    \end{itemize}
+    
+    \item \textbf{Xử lý thời gian thực:} Đạt tốc độ xử lý 25-30 FPS với pipeline giám sát và 5-10 FPS với full pipeline bao gồm OCR trên phần cứng phổ thông (GPU GTX 1650 trở lên).
+    
+    \item \textbf{Giao diện thân thiện:} Cung cấp công cụ trực quan để cấu hình ROI, vẽ làn đường, stop line và quản lý toàn bộ hệ thống qua giao diện đồ họa.
+\end{itemize}
+
+\subsection{Ý nghĩa thực tiễn}
+
+Hệ thống đã chứng minh tiềm năng ứng dụng trong các bối cảnh sau:
+
+\begin{itemize}
+    \item \textbf{Quản lý giao thông đô thị:} Hỗ trợ cơ quan chức năng giám sát và xử lý vi phạm hiệu quả hơn
+    \item \textbf{Phân tích dữ liệu giao thông:} Cung cấp số liệu thống kê về lưu lượng xe theo thời gian và loại phương tiện
+    \item \textbf{Hệ thống ALPR:} Nhận diện biển số xe phục vụ thu phí tự động, quản lý bãi đỗ xe
+    \item \textbf{Nghiên cứu và đào tạo:} Làm nền tảng cho các nghiên cứu nâng cao về Computer Vision và AI trong giao thông
+    \item \textbf{Tiết kiệm chi phí:} Giảm nhu cầu giám sát thủ công, tận dụng camera CCTV sẵn có
+\end{itemize}
+
+\subsection{Những hạn chế}
+
+Mặc dù đạt được nhiều thành tựu, hệ thống vẫn còn một số hạn chế:
+
+\begin{itemize}
+    \item \textbf{Điều kiện ánh sáng:} Hiệu suất giảm trong điều kiện ánh sáng yếu hoặc thời tiết xấu (mưa, sương mù)
+    \item \textbf{Góc camera:} Yêu cầu camera đặt ở vị trí và góc quay phù hợp, cần hiệu chỉnh khi thay đổi góc nhìn
+    \item \textbf{OCR biển số:} Độ chính xác OCR phụ thuộc vào chất lượng ảnh và góc chụp biển số
+    \item \textbf{Che khuất:} Khó xử lý trong trường hợp các phương tiện bị che khuất nặng bởi nhau
+    \item \textbf{Nhầm lẫn xe đạp-xe máy:} Tỷ lệ nhầm lẫn 18\% giữa hai lớp này do hình dáng tương đồng
+\end{itemize}
+
+\section{Hướng phát triển}
+
+Dựa trên kết quả đạt được và những hạn chế hiện tại, nhóm đề xuất các hướng phát triển sau:
+
+\subsection{Ngắn hạn (3-6 tháng)}
+
+\begin{itemize}
+    \item \textbf{Cải thiện OCR:}
+    \begin{itemize}
+        \item Thử nghiệm các mô hình OCR khác như EasyOCR, TrOCR
+        \item Tăng cường dữ liệu huấn luyện với biển số Việt Nam đa dạng
+        \item Áp dụng kỹ thuật super-resolution để tăng chất lượng ảnh biển số
+    \end{itemize}
+    
+    \item \textbf{Mở rộng loại vi phạm:}
+    \begin{itemize}
+        \item Phát hiện không đội mũ bảo hiểm (xe máy)
+        \item Phát hiện sử dụng điện thoại khi lái xe
+        \item Phát hiện vi phạm tốc độ (với camera hỗ trợ)
+    \end{itemize}
+    
+    \item \textbf{Tối ưu hiệu suất:}
+    \begin{itemize}
+        \item Triển khai với TensorRT hoặc ONNX Runtime để đạt tốc độ $>$ 30 FPS
+        \item Sử dụng batch processing cho OCR khi có nhiều biển số trong frame
+        \item Tối ưu hóa pipeline để giảm GPU memory usage
+    \end{itemize}
+\end{itemize}
+
+\subsection{Trung hạn (6-12 tháng)}
+
+\begin{itemize}
+    \item \textbf{Tích hợp đa camera:}
+    \begin{itemize}
+        \item Xử lý đồng thời nhiều luồng video từ nhiều camera
+        \item Tracking xuyên camera (cross-camera tracking)
+        \item Dashboard tổng hợp thống kê toàn hệ thống
+    \end{itemize}
+    
+    \item \textbf{Cơ sở dữ liệu vi phạm:}
+    \begin{itemize}
+        \item Lưu trữ ảnh/video vi phạm vào database
+        \item API tra cứu lịch sử vi phạm theo biển số
+        \item Tự động gửi thông báo/email khi phát hiện vi phạm
+    \end{itemize}
+    
+    \item \textbf{Học sâu nâng cao:}
+    \begin{itemize}
+        \item Áp dụng Re-ID (Re-Identification) để theo dõi xe chính xác hơn
+        \item Sử dụng Transformer-based models (DETR, DINO) cho detection
+        \item Kết hợp với Optical Flow để dự đoán quỹ đạo
+    \end{itemize}
+\end{itemize}
+
+\subsection{Dài hạn (1-2 năm)}
+
+\begin{itemize}
+    \item \textbf{Hệ thống hoàn toàn tự động:}
+    \begin{itemize}
+        \item Tự động phát hiện và cấu hình ROI khi thêm camera mới
+        \item Tự động hiệu chỉnh góc camera và lighting
+        \item Self-learning để cải thiện độ chính xác theo thời gian
+    \end{itemize}
+    
+    \item \textbf{Edge Computing:}
+    \begin{itemize}
+        \item Deploy model trên thiết bị edge (Jetson Nano, Coral TPU)
+        \item Giảm băng thông và độ trễ mạng
+        \item Xây dựng mạng lưới camera thông minh phân tán
+    \end{itemize}
+    
+    \item \textbf{AI Explainability:}
+    \begin{itemize}
+        \item Giải thích lý do phát hiện vi phạm bằng ngôn ngữ tự nhiên
+        \item Cung cấp báo cáo trực quan cho người dùng không chuyên
+        \item Tích hợp Grad-CAM để visualize vùng quan tâm của model
+    \end{itemize}
+    
+    \item \textbf{Tích hợp IoT và Smart City:}
+    \begin{itemize}
+        \item Kết nối với hệ thống đèn giao thông thông minh
+        \item Tích hợp dữ liệu với hệ thống quản lý đô thị
+        \item Phân tích xu hướng giao thông dài hạn để đề xuất giải pháp quy hoạch
+    \end{itemize}
+\end{itemize}
+
+\section{Lời kết}
+
+Đề tài đã đi từ nghiên cứu lý thuyết đến xây dựng thành công một ứng dụng thực tế, chứng minh khả năng áp dụng công nghệ AI vào bài toán giám sát giao thông Việt Nam. Hệ thống kết hợp thành công:
+\begin{itemize}
+    \item Phát hiện đối tượng (YOLOv8)
+    \item Theo dõi đa đối tượng (ByteTrack + Kalman Filter)
+    \item Phát hiện vi phạm (Direction Fusion + Geometric Logic)
+    \item Nhận diện biển số (YOLOv8 + PaddleOCR)
+\end{itemize}
+
+Với kết quả đạt được và các hướng phát triển đã đề xuất, nhóm tin tưởng rằng hệ thống có thể tiếp tục được hoàn thiện và triển khai rộng rãi, góp phần nâng cao hiệu quả quản lý giao thông và an toàn đường bộ tại Việt Nam.
+
+Nhóm xin chân thành cảm ơn sự hướng dẫn tận tình của \textbf{TS. Cao Văn Chung}, sự hỗ trợ từ bạn bè đồng nghiệp, và tất cả những người đã đóng góp cho sự thành công của đề tài này.

@@ -1,0 +1,24 @@
+{
+  "video_name": "testdem1.mp4",
+  "video_path": "D:/test adcv/testdem1.mp4",
+  "lanes": [],
+  "stopline": {
+    "p1": [
+      31,
+      260
+    ],
+    "p2": [
+      716,
+      270
+    ]
+  },
+  "traffic_lights": [],
+  "direction_zones": [],
+  "reference_vector": null,
+  "model": {
+    "type": "YOLOv8",
+    "weight": "416_vehicle_plate.pt",
+    "imgsz": 416,
+    "conf_threshold": 0.3
+  }
+}

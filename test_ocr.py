@@ -95,28 +95,32 @@ def run_ocr(ocr, frame, bbox, use_easyocr=False, save_debug=False):
             else:
                 processed_bgr = processed
             
-            result = ocr.predict(processed_bgr)
+            # PaddleOCR uses ocr() method, not predict()
+            result = ocr.ocr(processed_bgr, cls=False)
             
-            # New PaddleOCR format returns dict with 'rec_texts' key
-            if result and len(result) > 0:
-                result_dict = result[0]
-                if isinstance(result_dict, dict) and 'rec_texts' in result_dict:
-                    texts = result_dict['rec_texts']
-                    scores = result_dict.get('rec_scores', [])
-                    
-                    # Filter by confidence and join
-                    filtered_texts = []
-                    for i, text in enumerate(texts):
-                        conf = scores[i] if i < len(scores) else 1.0
-                        if conf > 0.5:  # Min confidence threshold
-                            filtered_texts.append(str(text).strip())
-                    
-                    final_text = "".join(filtered_texts).replace(" ", "").replace(".", "")
+            # PaddleOCR returns list of lines, each with [(bbox, (text, confidence))]
+            if result and len(result) > 0 and result[0]:
+                texts = []
+                scores = []
+                
+                for line in result[0]:
+                    if line and len(line) >= 2:
+                        text_info = line[1]  # (text, confidence)
+                        if isinstance(text_info, (list, tuple)) and len(text_info) >= 2:
+                            text = str(text_info[0]).strip()
+                            conf = float(text_info[1])
+                            
+                            if conf > 0.5:  # Min confidence threshold
+                                texts.append(text)
+                                scores.append(conf)
+                
+                if texts:
+                    final_text = "".join(texts).replace(" ", "").replace(".", "")
                     print(f"    ✅ OCR found: {texts} (conf: {scores})")
                     print(f"    ✅ Final text: '{final_text}'")
                     return final_text
                 else:
-                    print(f"    ⚠️ Unexpected result format: {type(result_dict)}")
+                    print(f"    ⚠️ No text passed confidence threshold")
             else:
                 print(f"    ⚠️ No text detected")
             return ""
@@ -242,11 +246,24 @@ def test_pipeline(image_path, model_path="models/yolov8/416_vehicle_plate.pt"):
         result_img = cv2.resize(result_img, (new_w, new_h))
         print(f"🔽 Resized to {new_w}x{new_h} for display")
     
-    # Show
-    cv2.imshow("OCR Test Result", result_img)
-    print("\n👁️  Press any key to close...")
-    cv2.waitKey(0)
-    cv2.destroyAllWindows()
+    # Save and show result (use matplotlib instead of cv2.imshow for compatibility)
+    output_path = "ocr_test_result.jpg"
+    cv2.imwrite(output_path, result_img)
+    print(f"\n� Result saved to: {output_path}")
+    
+    # Try to show with matplotlib (more reliable than cv2.imshow)
+    try:
+        import matplotlib.pyplot as plt
+        plt.figure(figsize=(15, 10))
+        plt.imshow(cv2.cvtColor(result_img, cv2.COLOR_BGR2RGB))
+        plt.title("OCR Test Result")
+        plt.axis('off')
+        plt.tight_layout()
+        plt.show()
+        print("👁️  Image displayed with matplotlib")
+    except Exception as e:
+        print(f"⚠️  Cannot display image: {e}")
+        print(f"   Please open the saved file: {output_path}")
     
     print(f"\n{'='*60}")
     print("✅ TEST COMPLETED")

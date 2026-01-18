@@ -27,7 +27,7 @@
       "x2": 783,
       "y2": 125,
       "type": "rẽ phải",
-      "color": "xanh"
+      "color": "unknown"
     },
     {
       "x1": 676,
@@ -35,7 +35,7 @@
       "x2": 680,
       "y2": 78,
       "type": "rẽ trái",
-      "color": "đỏ"
+      "color": "unknown"
     },
     {
       "x1": 646,
@@ -43,7 +43,7 @@
       "x2": 670,
       "y2": 33,
       "type": "đi thẳng",
-      "color": "đỏ"
+      "color": "unknown"
     }
   ],
   "direction_zones": [
@@ -75,12 +75,12 @@
           151
         ],
         [
-          321,
-          154
+          322,
+          147
         ],
         [
-          342,
-          156
+          347,
+          149
         ],
         [
           375,
@@ -340,5 +340,11 @@
       461,
       263
     ]
+  },
+  "model": {
+    "type": "YOLOv8",
+    "weight": "416_vehicle_plate.pt",
+    "imgsz": 416,
+    "conf_threshold": 0.3
   }
 }

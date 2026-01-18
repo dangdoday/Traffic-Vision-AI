@@ -5,6 +5,14 @@ import os
 import math
 import warnings
 
+# Ensure console encoding cannot crash on Windows terminals that do not support UTF-8/emoji
+try:
+    sys.stdout.reconfigure(encoding="utf-8", errors="replace")
+    sys.stderr.reconfigure(encoding="utf-8", errors="replace")
+except Exception:
+    # If reconfigure is unavailable, fall back silently
+    pass
+
 # Suppress minor warnings from dependencies
 warnings.filterwarnings('ignore', category=UserWarning)
 warnings.filterwarnings('ignore', message='.*Could not find files.*')
@@ -33,13 +41,11 @@ else:
 
 from model_config import scan_all_models, get_weight_path, get_model_config, migrate_old_weights
 
-# Import core OOP modules
-from core import VehicleTracker, ViolationDetector, StopLineManager, TrafficLightManager, VideoThread
-
-# Import Direction Detection modules
-from core.roi_direction_manager import ROIDirectionManager
-from core.trajectory_direction_analyzer import TrajectoryDirectionAnalyzer
-from core.direction_fusion import DirectionFusion
+# =============================================================================
+# CRITICAL: Import ALL local modules BEFORE 'core' module
+# PaddleOCR (imported by core.video_thread) adds its own 'tools', 'utils', etc. 
+# to sys.path, causing import conflicts with our local packages
+# =============================================================================
 
 # Import ROI Editor
 from tools.roi_editor import ROIEditor
@@ -62,6 +68,18 @@ from app.detection import (
     check_tl_violation, check_speed_violation, check_lane_direction_match,
     set_vehicle_positions_ref, set_violation_checker_globals
 )
+
+# =============================================================================
+# NOW import core modules (this will trigger PaddleOCR import)
+# =============================================================================
+
+# Import core OOP modules
+from core import VehicleTracker, ViolationDetector, StopLineManager, TrafficLightManager, VideoThread
+
+# Import Direction Detection modules
+from core.roi_direction_manager import ROIDirectionManager
+from core.trajectory_direction_analyzer import TrajectoryDirectionAnalyzer
+from core.direction_fusion import DirectionFusion
 
 # Traffic light state - Support multiple traffic lights with types
 TL_ROIS = []  # List of (x1, y1, x2, y2, tl_type, current_color) tuples - NO stoplines needed
@@ -88,8 +106,10 @@ VEHICLE_DIRECTIONS = {}  # {track_id: 'straight', 'left', 'right', 'unknown'}
 # Link VEHICLE_POSITIONS to direction_detector module
 set_vehicle_positions_ref(VEHICLE_POSITIONS)
 
-# Link TL_ROIS, DIRECTION_ROIS, VEHICLE_DIRECTIONS to violation_checker module
-set_violation_checker_globals(TL_ROIS, DIRECTION_ROIS, VEHICLE_DIRECTIONS)
+# ⚠️ NOTE: set_violation_checker_globals is now called in MainWindow.__init__()
+# to ensure proper module context (avoids issues when module is imported vs run directly)
+# OLD CODE (moved to MainWindow.__init__):
+# set_violation_checker_globals(TL_ROIS, DIRECTION_ROIS, VEHICLE_DIRECTIONS)
 
 # NOTE: tl_pixel_state, classify_tl_color, point_in_polygon are imported from modules
 # See imports at top of file:
@@ -110,6 +130,7 @@ _show_all_boxes = True  # True = show all vehicles, False = show only violators
 VIOLATOR_TRACK_IDS = set()
 RED_LIGHT_VIOLATORS = set()
 LANE_VIOLATORS = set()
+DIRECTION_VIOLATORS = set()  # Track vehicles that went wrong direction in ROI
 PASSED_VEHICLES = set()  # Track vehicles that passed stop line
 MOTORBIKE_COUNT = set()  # Track motorbikes (xe máy)
 CAR_COUNT = set()  # Track cars/trucks/buses (ô tô, xe tải, xe bus)
@@ -131,7 +152,7 @@ def is_on_stop_line(cx, cy, threshold=15):
 # NOTE: check_speed_violation is imported from app.detection (100% identical)
 
 # NOTE: check_lane_direction_match and check_tl_violation are imported from app.detection
-# They use TL_ROIS, DIRECTION_ROIS, VEHICLE_DIRECTIONS via set_violation_checker_globals() called above
+# They use TL_ROIS, DIRECTION_ROIS, VEHICLE_DIRECTIONS via set_violation_checker_globals() called in __init__
 
 
 class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMixin, TrafficLightHandlerMixin, LaneHandlerMixin, ConfigHandlerMixin, EventHandlerMixin, ModelHandlerMixin, DisplayHandlerMixin, DialogHandlerMixin, VideoHandlerMixin, DetectionHandlerMixin):
@@ -142,6 +163,11 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         global VIOLATOR_TRACK_IDS, RED_LIGHT_VIOLATORS, LANE_VIOLATORS, PASSED_VEHICLES, MOTORBIKE_COUNT, CAR_COUNT
         global ALLOWED_VEHICLE_IDS, VEHICLE_CLASSES, LANE_CONFIGS, TL_ROIS, _show_all_boxes
         global DIRECTION_ROIS, _tmp_direction_roi_pts, _selected_direction
+        
+        # ⚠️ CRITICAL: Link globals to violation_checker module HERE (in __init__)
+        # This ensures proper module context - same lists as used by this MainWindow instance
+        set_violation_checker_globals(TL_ROIS, DIRECTION_ROIS, VEHICLE_DIRECTIONS)
+        print(f"✅ [MainWindow.__init__] Linked globals: TL_ROIS id={id(TL_ROIS)}")
         
         # Initialize ROI Editor
         self.roi_editor = ROIEditor()
@@ -310,6 +336,13 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         self.btn_toggle_bb.clicked.connect(self.toggle_bbox_display)
         control_layout.addWidget(self.btn_toggle_bb)
         
+        # Toggle violator trajectory display
+        self.btn_toggle_trajectory = QPushButton("Violator Trajectory: ON")
+        self.btn_toggle_trajectory.setCheckable(True)
+        self.btn_toggle_trajectory.setChecked(True)
+        self.btn_toggle_trajectory.clicked.connect(self.toggle_trajectory_display)
+        control_layout.addWidget(self.btn_toggle_trajectory)
+        
         # Select video button
         self.btn_select_video = QPushButton("Select Video File")
         self.btn_select_video.clicked.connect(self.select_video)
@@ -358,8 +391,8 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         self.btn_edit_direction_roi.clicked.connect(self.start_edit_direction_roi)
         control_layout.addWidget(self.btn_edit_direction_roi)
         
-        self.btn_finish_edit_roi = QPushButton("Finish Editing ROI")
-        self.btn_finish_edit_roi.clicked.connect(self.finish_edit_roi)
+        self.btn_finish_edit_roi = QPushButton("Finish Editing")
+        self.btn_finish_edit_roi.clicked.connect(self._finish_current_editing)
         self.btn_finish_edit_roi.setEnabled(False)
         control_layout.addWidget(self.btn_finish_edit_roi)
         
@@ -471,6 +504,7 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
             'VIOLATOR_TRACK_IDS': VIOLATOR_TRACK_IDS,
             'RED_LIGHT_VIOLATORS': RED_LIGHT_VIOLATORS,
             'LANE_VIOLATORS': LANE_VIOLATORS,
+            'DIRECTION_VIOLATORS': DIRECTION_VIOLATORS,
             'PASSED_VEHICLES': PASSED_VEHICLES,
             'MOTORBIKE_COUNT': MOTORBIKE_COUNT,
             'CAR_COUNT': CAR_COUNT
@@ -498,7 +532,20 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
                 self.current_frame = first_frame
             self.cap.set(cv2.CAP_PROP_POS_FRAMES, 0)  # Reset to start
         
-        # No auto-detect - user will draw TL ROIs manually
+        # ⚠️ CRITICAL FIX: Auto-load configuration for initial video (same as select_video)
+        # This ensures violation detection works immediately after starting, not only after switching videos
+        if self.config_manager.config_exists(self.video_path):
+            print(f"🔍 Found existing configuration for initial video")
+            if self.auto_load_configuration():
+                self.config_status_label.setText(f"✅ Config: Auto-loaded from file")
+                self.config_status_label.setStyleSheet("QLabel { color: green; font-weight: bold; }")
+                self.status_label.setText(f"Status: Loaded video [Config auto-loaded]")
+                print("✅ Configuration auto-loaded for initial video - Violation detection ready!")
+            else:
+                print("⚠️ Failed to auto-load configuration for initial video")
+        else:
+            print("ℹ️ No saved configuration found for initial video - Draw ROIs manually")
+        
         self.update_lists()
     
     # NOTE: update_image moved to DisplayHandlerMixin
@@ -576,15 +623,10 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         # === EDIT Menu ===
         edit_menu = menubar.addMenu("✏️ &Edit")
         
-        # Edit Lane (dialog)
-        action_edit_lane = QAction("Edit Lane...", self)
-        action_edit_lane.triggered.connect(self.show_edit_lane_dialog)
-        edit_menu.addAction(action_edit_lane)
-        
-        # Edit Lane Interactive (drag points)
-        self.action_edit_lane_interactive = QAction("Edit Lane (Interactive)", self)
-        self.action_edit_lane_interactive.triggered.connect(self.start_edit_lane)
-        edit_menu.addAction(self.action_edit_lane_interactive)
+        # Edit Lane (drag points + vehicle types)
+        self.action_edit_lane = QAction("Edit Lane...", self)
+        self.action_edit_lane.triggered.connect(self.start_edit_lane)
+        edit_menu.addAction(self.action_edit_lane)
 
         # Edit direction ROI
         self.action_edit_direction = QAction("Edit Direction ROI...", self)
@@ -610,8 +652,8 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         
         # Finish editing
         self.action_finish_edit = QAction("Finish Editing", self)
-        self.action_finish_edit.setShortcut("Return")
-        self.action_finish_edit.triggered.connect(self.finish_edit_roi)
+        # Note: No shortcut to avoid conflict with dialog buttons
+        self.action_finish_edit.triggered.connect(self._finish_current_editing)
         self.action_finish_edit.setEnabled(False)
         edit_menu.addAction(self.action_finish_edit)
         
@@ -895,6 +937,22 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
             print(f"✅ Model moved to {self.device}")
         
         self.statusBar().showMessage("Device: CPU", 3000)
+    
+    def _finish_current_editing(self):
+        """Finish current editing - calls appropriate finish method based on what's being edited"""
+        if hasattr(self, 'roi_editor'):
+            print(f"🔍 _finish_current_editing: is_editing={self.roi_editor.is_editing()}, "
+                  f"is_editing_lane={self.roi_editor.is_editing_lane()}, "
+                  f"is_editing_direction={self.roi_editor.is_editing_direction()}, "
+                  f"editing_type={self.roi_editor.editing_type}")
+            if self.roi_editor.is_editing_lane():
+                print("📌 Calling finish_edit_lane()")
+                self.finish_edit_lane()
+            elif self.roi_editor.is_editing_direction():
+                print("📌 Calling finish_edit_roi()")
+                self.finish_edit_roi()
+            else:
+                print("⚠️ Not editing anything")
     
     def closeEvent(self, event):
         self.thread.stop()

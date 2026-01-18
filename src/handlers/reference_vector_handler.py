@@ -2,6 +2,7 @@
 Reference Vector Handler Mixin
 Contains methods for setting reference vector for camera angle calibration
 """
+import sys
 import math
 from PyQt5.QtWidgets import QMessageBox
 
@@ -10,7 +11,11 @@ class ReferenceVectorHandlerMixin:
     """Mixin class for reference vector handling in MainWindow"""
     
     def _get_globals(self):
-        """Get globals from integrated_main - lazy import"""
+        """Get globals from the main module - handles both __main__ and integrated_main cases"""
+        if '__main__' in sys.modules:
+            main_module = sys.modules['__main__']
+            if hasattr(main_module, 'TL_ROIS') and hasattr(main_module, 'LANE_CONFIGS'):
+                return main_module
         import integrated_main
         return integrated_main
     

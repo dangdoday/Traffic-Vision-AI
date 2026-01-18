@@ -1,11 +1,16 @@
 """
 Detection Handler Mixin - Handles detection start/stop and ROI editing dialogs
 """
+import sys
 from PyQt5.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QLabel, QListWidget, QPushButton
 
 
 def _get_globals():
-    """Lazy import to avoid circular dependency"""
+    """Get globals from the main module - handles both __main__ and integrated_main cases"""
+    if '__main__' in sys.modules:
+        main_module = sys.modules['__main__']
+        if hasattr(main_module, 'TL_ROIS') and hasattr(main_module, 'LANE_CONFIGS'):
+            return main_module
     import integrated_main
     return integrated_main
 
@@ -121,14 +126,23 @@ class DetectionHandlerMixin:
         VIOLATOR_TRACK_IDS = g.VIOLATOR_TRACK_IDS
         RED_LIGHT_VIOLATORS = g.RED_LIGHT_VIOLATORS
         LANE_VIOLATORS = g.LANE_VIOLATORS
+        DIRECTION_VIOLATORS = g.DIRECTION_VIOLATORS
         PASSED_VEHICLES = g.PASSED_VEHICLES
         MOTORBIKE_COUNT = g.MOTORBIKE_COUNT
         CAR_COUNT = g.CAR_COUNT
         
         if not g._detection_running:
+            # Debug: Check prerequisites
+            print(f"🔍 Debug - yolo_model: {self.yolo_model is not None}")
+            print(f"🔍 Debug - thread exists: {hasattr(self, 'thread')}")
+            if hasattr(self, 'thread'):
+                print(f"🔍 Debug - thread.model: {self.thread.model is not None}")
+                print(f"🔍 Debug - thread.model_loaded: {self.thread.model_loaded}")
+            
             if self.yolo_model is None:
                 self.status_label.setText("Status: Model not loaded at startup")
                 QMessageBox.warning(self, "No Model", "Please select a model first!")
+                print("❌ Detection failed: yolo_model is None")
                 return
             
             # Check if reference vector is set (critical for direction detection accuracy)
@@ -172,6 +186,7 @@ class DetectionHandlerMixin:
             VIOLATOR_TRACK_IDS.clear()
             RED_LIGHT_VIOLATORS.clear()
             LANE_VIOLATORS.clear()
+            DIRECTION_VIOLATORS.clear()
             PASSED_VEHICLES.clear()
             MOTORBIKE_COUNT.clear()
             CAR_COUNT.clear()

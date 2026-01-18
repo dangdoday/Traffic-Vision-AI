@@ -1,12 +1,17 @@
 """
 Video Handler Mixin - Handles video loading and management
 """
+import sys
 import cv2
 from PyQt5.QtWidgets import QFileDialog
 
 
 def _get_globals():
-    """Lazy import to avoid circular dependency"""
+    """Get globals from the main module - handles both __main__ and integrated_main cases"""
+    if '__main__' in sys.modules:
+        main_module = sys.modules['__main__']
+        if hasattr(main_module, 'TL_ROIS') and hasattr(main_module, 'LANE_CONFIGS'):
+            return main_module
     import integrated_main
     return integrated_main
 
@@ -22,6 +27,7 @@ class VideoHandlerMixin:
         VIOLATOR_TRACK_IDS = g.VIOLATOR_TRACK_IDS
         RED_LIGHT_VIOLATORS = g.RED_LIGHT_VIOLATORS
         LANE_VIOLATORS = g.LANE_VIOLATORS
+        DIRECTION_VIOLATORS = g.DIRECTION_VIOLATORS
         PASSED_VEHICLES = g.PASSED_VEHICLES
         MOTORBIKE_COUNT = g.MOTORBIKE_COUNT
         CAR_COUNT = g.CAR_COUNT
@@ -76,6 +82,12 @@ class VideoHandlerMixin:
                 'CAR_COUNT': CAR_COUNT
             })
             
+            # ⚠️ FIX: Set model to new thread (same as __init__)
+            if self.yolo_model is not None:
+                self.thread.set_model(self.yolo_model)
+                self.thread.model_config = self.current_model_config
+                print(f"✅ Model set to new VideoThread for video change")
+            
             self.thread.start()
             
             # Store cap for TL detection
@@ -89,6 +101,7 @@ class VideoHandlerMixin:
             VIOLATOR_TRACK_IDS.clear()
             RED_LIGHT_VIOLATORS.clear()
             LANE_VIOLATORS.clear()
+            DIRECTION_VIOLATORS.clear()
             PASSED_VEHICLES.clear()
             self.btn_start.setText("Start Detection")
             

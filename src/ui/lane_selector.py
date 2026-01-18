@@ -32,6 +32,26 @@ class VehicleTypeDialog(QDialog):
         if self.cb_all.isChecked():
             return ["all"]
         return [cb.text() for cb in self.checkboxes if cb.isChecked()]
+    
+    def set_selected(self, selected_types):
+        """Pre-select vehicle types"""
+        if not selected_types:
+            return
+        
+        # Check if "all" is selected
+        if "all" in selected_types:
+            self.cb_all.setChecked(True)
+            return
+        
+        # Uncheck "all" first
+        self.cb_all.setChecked(False)
+        
+        # Check matching types
+        for cb in self.checkboxes:
+            if cb.text() in selected_types:
+                cb.setChecked(True)
+            else:
+                cb.setChecked(False)
 
 class LaneSelectorWindow(QWidget):
     def __init__(self):

@@ -11,6 +11,7 @@ class ViolationDetector:
         self.passed_vehicles: Set[int] = set()
         self.red_light_violators: Set[int] = set()
         self.lane_violators: Set[int] = set()
+        self.direction_violators: Set[int] = set()  # Vehicles going wrong direction
         self.violator_track_ids: Set[int] = set()
         
         # Đếm phương tiện
@@ -97,6 +98,8 @@ class ViolationDetector:
             self.red_light_violators.add(track_id)
         elif violation_type == 'lane':
             self.lane_violators.add(track_id)
+        elif violation_type == 'direction':
+            self.direction_violators.add(track_id)
     
     def mark_vehicle_passed(self, track_id: int, vehicle_class: int):
         """Đánh dấu xe đã qua stopline và đếm theo loại"""
@@ -121,6 +124,7 @@ class ViolationDetector:
             'cars': len(self.car_count),
             'red_light_violations': len(self.red_light_violators),
             'lane_violations': len(self.lane_violators),
+            'direction_violations': len(self.direction_violators),
             'total_violations': len(self.violator_track_ids)
         }
     
@@ -129,6 +133,7 @@ class ViolationDetector:
         self.passed_vehicles.clear()
         self.red_light_violators.clear()
         self.lane_violators.clear()
+        self.direction_violators.clear()
         self.violator_track_ids.clear()
         self.motorbike_count.clear()
         self.car_count.clear()

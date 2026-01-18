@@ -8,6 +8,21 @@ from pathlib import Path
 from typing import Dict, List, Tuple, Optional
 
 
+def _safe_print(msg: str):
+    """
+    Print helper that avoids UnicodeEncodeError on Windows terminals that
+    do not support UTF-8. Falls back to ASCII with replacement.
+    """
+    try:
+        print(msg)
+    except UnicodeEncodeError:
+        try:
+            print(msg.encode("ascii", "replace").decode("ascii"))
+        except Exception:
+            # Last resort: drop the message
+            pass
+
+
 class ConfigManager:
     """Manages saving and loading of ROI configurations"""
     
@@ -25,7 +40,7 @@ class ConfigManager:
         
         self.config_dir = Path(config_dir)
         self.config_dir.mkdir(parents=True, exist_ok=True)
-        print(f"📁 Config directory: {self.config_dir}")
+        _safe_print(f"[Config] Directory: {self.config_dir}")
     
     def get_config_path(self, video_path: str) -> Path:
         """
@@ -71,15 +86,51 @@ class ConfigManager:
         try:
             config_path = self.get_config_path(video_path)
             
-            # Prepare data structure
+            # Debug: Log what we're serializing
+            _safe_print(f"[Config] Saving to: {config_path}")
+            _safe_print(f"[Config] Lanes: {len(lane_configs)}, Stopline: {stop_line is not None}, TLs: {len(tl_rois)}, DirROIs: {len(direction_rois)}")
+            
+            # Prepare data structure with error handling for each part
+            try:
+                lanes_serialized = self._serialize_lanes(lane_configs)
+            except Exception as e:
+                _safe_print(f"[Config] ERROR serializing lanes: {e}")
+                lanes_serialized = []
+            
+            try:
+                stopline_serialized = self._serialize_stopline(stop_line)
+            except Exception as e:
+                _safe_print(f"[Config] ERROR serializing stopline: {e}")
+                stopline_serialized = None
+            
+            try:
+                tl_serialized = self._serialize_traffic_lights(tl_rois)
+            except Exception as e:
+                _safe_print(f"[Config] ERROR serializing traffic lights: {e}")
+                import traceback
+                traceback.print_exc()
+                tl_serialized = []
+            
+            try:
+                dir_serialized = self._serialize_direction_zones(direction_rois)
+            except Exception as e:
+                _safe_print(f"[Config] ERROR serializing direction zones: {e}")
+                dir_serialized = []
+            
+            try:
+                ref_serialized = self._serialize_reference_vector(reference_vector)
+            except Exception as e:
+                _safe_print(f"[Config] ERROR serializing reference vector: {e}")
+                ref_serialized = None
+            
             config_data = {
                 'video_name': Path(video_path).name,
                 'video_path': str(video_path),
-                'lanes': self._serialize_lanes(lane_configs),
-                'stopline': self._serialize_stopline(stop_line),
-                'traffic_lights': self._serialize_traffic_lights(tl_rois),
-                'direction_zones': self._serialize_direction_zones(direction_rois),
-                'reference_vector': self._serialize_reference_vector(reference_vector),
+                'lanes': lanes_serialized,
+                'stopline': stopline_serialized,
+                'traffic_lights': tl_serialized,
+                'direction_zones': dir_serialized,
+                'reference_vector': ref_serialized,
                 'model': {
                     'type': model_type,
                     'weight': weight_name,
@@ -92,11 +143,11 @@ class ConfigManager:
             with open(config_path, 'w', encoding='utf-8') as f:
                 json.dump(config_data, f, indent=2, ensure_ascii=False)
             
-            print(f"✅ Configuration saved: {config_path}")
+            _safe_print(f"[Config] Saved: {config_path}")
             return True
             
         except Exception as e:
-            print(f"❌ Failed to save config: {e}")
+            _safe_print(f"[Config] Failed to save: {e}")
             return False
     
     def load_config(self, video_path: str) -> Optional[Dict]:
@@ -113,7 +164,7 @@ class ConfigManager:
             config_path = self.get_config_path(video_path)
             
             if not config_path.exists():
-                print(f"ℹ️ No config found for this video: {config_path}")
+                _safe_print(f"[Config] No saved config for this video: {config_path}")
                 return None
             
             with open(config_path, 'r', encoding='utf-8') as f:
@@ -129,18 +180,18 @@ class ConfigManager:
                 'model': config_data.get('model', {})
             }
             
-            print(f"✅ Configuration loaded: {config_path}")
-            print(f"   - Lanes: {len(result['lanes'])}")
-            print(f"   - Stopline: {'Yes' if result['stopline'] else 'No'}")
-            print(f"   - Traffic Lights: {len(result['traffic_lights'])}")
-            print(f"   - Direction Zones: {len(result['direction_zones'])}")
+            _safe_print(f"[Config] Loaded: {config_path}")
+            _safe_print(f"   - Lanes: {len(result['lanes'])}")
+            _safe_print(f"   - Stopline: {'Yes' if result['stopline'] else 'No'}")
+            _safe_print(f"   - Traffic Lights: {len(result['traffic_lights'])}")
+            _safe_print(f"   - Direction Zones: {len(result['direction_zones'])}")
             if result['model']:
-                print(f"   - Model: {result['model'].get('type', 'N/A')} ({result['model'].get('weight', 'N/A')})")
+                _safe_print(f"   - Model: {result['model'].get('type', 'N/A')} ({result['model'].get('weight', 'N/A')})")
             
             return result
             
         except Exception as e:
-            print(f"❌ Failed to load config: {e}")
+            _safe_print(f"[Config] Failed to load: {e}")
             return None
     
     def config_exists(self, video_path: str) -> bool:
@@ -152,10 +203,14 @@ class ConfigManager:
         """Convert lane configs to JSON-serializable format"""
         serialized = []
         for lane in lane_configs:
+            # Support both 'points' and 'poly' keys
+            points = lane.get('points', lane.get('poly', []))
+            # Support both 'allowed_types' and 'allowed_labels' keys
+            allowed = lane.get('allowed_types', lane.get('allowed_labels', []))
             serialized.append({
-                'points': lane['points'],
+                'points': points,
                 'label': lane.get('label', 'Unnamed Lane'),
-                'allowed_types': lane.get('allowed_types', [])
+                'allowed_types': allowed
             })
         return serialized
     
@@ -172,17 +227,23 @@ class ConfigManager:
     def _serialize_traffic_lights(self, tl_rois: List[Tuple]) -> List[Dict]:
         """Convert traffic light ROIs to JSON-serializable format"""
         serialized = []
-        for tl in tl_rois:
-            # Format: (x1, y1, x2, y2, tl_type, current_color)
-            x1, y1, x2, y2, tl_type, current_color = tl
-            serialized.append({
-                'x1': int(x1),
-                'y1': int(y1),
-                'x2': int(x2),
-                'y2': int(y2),
-                'type': tl_type,
-                'color': current_color  # Save last known color (optional)
-            })
+        for i, tl in enumerate(tl_rois):
+            try:
+                # Format: (x1, y1, x2, y2, tl_type, current_color)
+                if len(tl) != 6:
+                    _safe_print(f"[Config] WARNING: TL {i} has {len(tl)} elements, expected 6: {tl}")
+                    continue
+                x1, y1, x2, y2, tl_type, current_color = tl
+                serialized.append({
+                    'x1': int(x1),
+                    'y1': int(y1),
+                    'x2': int(x2),
+                    'y2': int(y2),
+                    'type': str(tl_type),
+                    'color': str(current_color) if current_color else 'unknown'
+                })
+            except Exception as e:
+                _safe_print(f"[Config] ERROR serializing TL {i}: {e}, data={tl}")
         return serialized
     
     def _serialize_direction_zones(self, direction_rois: List[Dict]) -> List[Dict]:

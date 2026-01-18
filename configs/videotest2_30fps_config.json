@@ -19,7 +19,7 @@
       "x2": 1537,
       "y2": 234,
       "type": "đi thẳng",
-      "color": "unknown"
+      "color": "xanh"
     },
     {
       "x1": 686,
@@ -27,7 +27,7 @@
       "x2": 721,
       "y2": 69,
       "type": "rẽ trái",
-      "color": "unknown"
+      "color": "xanh"
     },
     {
       "x1": 1511,
@@ -253,5 +253,11 @@
       939,
       508
     ]
+  },
+  "model": {
+    "type": "YOLOv8",
+    "weight": "416_vehicle_plate.pt",
+    "imgsz": 416,
+    "conf_threshold": 0.3
   }
 }

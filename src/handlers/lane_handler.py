@@ -2,6 +2,7 @@
 Lane Handler Mixin
 Contains methods for lane and stopline management
 """
+import sys
 import cv2
 import numpy as np
 from PyQt5.QtWidgets import QMessageBox, QDialog, QVBoxLayout, QHBoxLayout, QListWidget, QPushButton, QLabel
@@ -11,7 +12,11 @@ class LaneHandlerMixin:
     """Mixin class for lane and stopline handling in MainWindow"""
     
     def _get_globals(self):
-        """Get globals from integrated_main - lazy import"""
+        """Get globals from the main module - handles both __main__ and integrated_main cases"""
+        if '__main__' in sys.modules:
+            main_module = sys.modules['__main__']
+            if hasattr(main_module, 'TL_ROIS') and hasattr(main_module, 'LANE_CONFIGS'):
+                return main_module
         import integrated_main
         return integrated_main
     
@@ -41,13 +46,16 @@ class LaneHandlerMixin:
         print(f"✅ Created lane with {len(poly)} points")
         
         # Show vehicle type dialog
-        from ui.vehicle_type_dialog import VehicleTypeDialog
+        from ui.lane_selector import VehicleTypeDialog
         dialog = VehicleTypeDialog(self)
         if dialog.exec_() == dialog.Accepted:
             allowed = dialog.get_selected()
             main.LANE_CONFIGS.append({
                 "poly": poly,
-                "allowed_labels": allowed
+                "points": poly,  # Also save as points for config compatibility
+                "label": f"Lane {len(main.LANE_CONFIGS) + 1}",
+                "allowed_types": allowed,  # Primary key for video_thread
+                "allowed_labels": allowed  # Also set for compatibility
             })
             self.status_label.setText(f"Status: Lane added with vehicles: {', '.join(allowed)}")
         
@@ -112,7 +120,7 @@ class LaneHandlerMixin:
     # ========================================================================
     
     def start_edit_lane(self):
-        """Start interactive lane editing - drag/add/delete keypoints, then configure settings"""
+        """Start interactive lane editing - drag/add/delete keypoints using ROI editor"""
         main = self._get_globals()
         
         # Check if lanes exist
@@ -133,6 +141,10 @@ class LaneHandlerMixin:
             points = lane.get('poly', [])
             sel_lane_list.addItem(f"Lane {idx}: {len(points)} points - Allowed: {', '.join(allowed)}")
         sel_layout.addWidget(sel_lane_list)
+        
+        # Select first item by default
+        if sel_lane_list.count() > 0:
+            sel_lane_list.setCurrentRow(0)
         
         btn_layout = QHBoxLayout()
         btn_ok = QPushButton("Edit")
@@ -160,45 +172,57 @@ class LaneHandlerMixin:
         if selected < 0:
             return
         
-        # Enter interactive editing mode
-        self.editing_lane_idx = selected
-        self.dragging_lane_point_idx = None
-        
         lane = main.LANE_CONFIGS[selected]
         
-        # Update status
-        self.status_label.setText(
-            f"Status: Editing Lane {selected+1} - {len(lane['poly'])} points | "
-            f"Left-click+drag=move | Double-click=add | Delete key=remove | Press Enter or finish when done"
-        )
-        
-        # Enable finish edit action if exists
-        if hasattr(self, 'action_finish_edit'):
-            self.action_finish_edit.setEnabled(True)
-        
-        print(f"✏️ Editing Lane {selected+1}: ({len(lane['poly'])} points)")
-        print(f"   Left-click and drag to move points")
-        print(f"   Double-click near edge to add new point")
-        print(f"   Click a point then press Delete key to remove")
+        # Start ROI editor in lane mode
+        if hasattr(self, 'roi_editor'):
+            self.roi_editor.start_editing(selected, roi_type='lane')
+            
+            # Enable finish button
+            if hasattr(self, 'btn_finish_edit_roi'):
+                self.btn_finish_edit_roi.setEnabled(True)
+            if hasattr(self, 'action_finish_edit'):
+                self.action_finish_edit.setEnabled(True)
+            
+            self.status_label.setText(
+                f"Status: Editing Lane {selected+1} - {len(lane['poly'])} points | "
+                f"Left-click+drag=move | Double-click=add | Right-click=delete | Press Enter to finish"
+            )
+            
+            print(f"✏️ Started editing Lane {selected+1}: ({len(lane['poly'])} points)")
+            print(f"   Left-click and drag to move points")
+            print(f"   Double-click near edge to add new point")
+            print(f"   Right-click on point to delete it")
+        else:
+            QMessageBox.warning(self, "Editor Not Available", "ROI editor not initialized.")
     
     def finish_edit_lane(self):
         """Finish lane editing and show vehicle type selection dialog"""
         main = self._get_globals()
         from PyQt5.QtWidgets import QCheckBox
         
-        if not hasattr(self, 'editing_lane_idx') or self.editing_lane_idx is None:
+        # Check if we're editing a lane using roi_editor
+        if hasattr(self, 'roi_editor') and self.roi_editor.is_editing_lane():
+            selected = self.roi_editor.editing_roi_index
+        elif hasattr(self, 'editing_lane_idx') and self.editing_lane_idx is not None:
+            selected = self.editing_lane_idx
+        else:
             return
         
-        selected = self.editing_lane_idx
+        if selected < 0 or selected >= len(main.LANE_CONFIGS):
+            return
+            
         lane = main.LANE_CONFIGS[selected]
         
         # Stop editing mode
+        if hasattr(self, 'roi_editor'):
+            self.roi_editor.finish_editing()
         self.editing_lane_idx = None
         self.dragging_lane_point_idx = None
         
-        # Disable finish edit action
-        if hasattr(self, 'action_finish_edit'):
-            self.action_finish_edit.setEnabled(False)
+        # Disable finish edit button
+        if hasattr(self, 'btn_finish_edit_roi'):
+            self.btn_finish_edit_roi.setEnabled(False)
         
         # Show vehicle type selection dialog
         dialog = QDialog(self)
@@ -256,7 +280,10 @@ class LaneHandlerMixin:
                 QMessageBox.warning(dialog, "No Selection", "Please select at least one vehicle type or 'All'")
                 return
             
+            # Update both keys for compatibility
             lane['allowed_labels'] = new_allowed
+            lane['allowed_types'] = new_allowed
+            
             self.update_lists()
             print(f"✅ Lane {selected + 1} configured: Allowed vehicles = {new_allowed}")
             dialog.accept()
@@ -274,76 +301,56 @@ class LaneHandlerMixin:
     # ========================================================================
             
     def delete_lane(self):
-        """Delete selected lane from list"""
-        main = self._get_globals()
-        selected = self.lane_list.currentRow()
-        if selected >= 0 and selected < len(main.LANE_CONFIGS):
-            del main.LANE_CONFIGS[selected]
-            self.update_lists()
-            self.status_label.setText(f"Status: Deleted lane {selected + 1}")
-    
-    def show_edit_lane_dialog(self):
-        """Show dialog to select and edit a lane"""
+        """Delete lane with selection dialog"""
         main = self._get_globals()
         
         if not main.LANE_CONFIGS:
-            QMessageBox.information(self, "No Lanes", "No lanes configured yet. Please add lanes first.")
+            QMessageBox.information(self, "No Lanes", "No lanes to delete.")
             return
         
+        # Show selection dialog
         dialog = QDialog(self)
-        dialog.setWindowTitle("Edit Lane")
-        dialog.setMinimumSize(500, 400)
+        dialog.setWindowTitle("Delete Lane")
+        dialog.setMinimumSize(400, 300)
+        layout = QVBoxLayout(dialog)
         
-        layout = QVBoxLayout()
-        
-        # Lane list
-        lane_list = QListWidget()
+        layout.addWidget(QLabel("<b>Select a lane to delete:</b>"))
+        lane_list_widget = QListWidget()
         for idx, lane in enumerate(main.LANE_CONFIGS, start=1):
             allowed = lane.get('allowed_labels', ['all'])
             points = lane.get('poly', [])
-            lane_list.addItem(f"Lane {idx}: {len(points)} points - Allowed: {', '.join(allowed)}")
+            lane_list_widget.addItem(f"Lane {idx}: {len(points)} points - Allowed: {', '.join(allowed)}")
+        layout.addWidget(lane_list_widget)
         
-        layout.addWidget(QLabel("<b>Select a lane to edit:</b>"))
-        layout.addWidget(lane_list)
+        # Select first item by default
+        if lane_list_widget.count() > 0:
+            lane_list_widget.setCurrentRow(0)
         
-        # Buttons
         btn_layout = QHBoxLayout()
-        
-        btn_edit = QPushButton("Edit Selected")
-        btn_edit.clicked.connect(lambda: self.start_edit_selected_lane(lane_list.currentRow(), dialog))
-        btn_layout.addWidget(btn_edit)
-        
-        btn_delete = QPushButton("Delete Selected")
-        btn_delete.clicked.connect(lambda: self.delete_selected_lane(lane_list.currentRow(), dialog))
+        btn_delete = QPushButton("Delete")
+        btn_delete.setStyleSheet("background-color: #dc3545; color: white;")
+        btn_cancel = QPushButton("Cancel")
         btn_layout.addWidget(btn_delete)
-        
-        btn_close = QPushButton("Close")
-        btn_close.clicked.connect(dialog.close)
-        btn_layout.addWidget(btn_close)
-        
+        btn_layout.addWidget(btn_cancel)
         layout.addLayout(btn_layout)
-        dialog.setLayout(layout)
+        
+        btn_cancel.clicked.connect(dialog.reject)
+        
+        def on_delete():
+            sel_idx = lane_list_widget.currentRow()
+            if sel_idx >= 0 and sel_idx < len(main.LANE_CONFIGS):
+                del main.LANE_CONFIGS[sel_idx]
+                self.update_lists()
+                self.status_label.setText(f"Status: Deleted Lane {sel_idx + 1}")
+                print(f"🗑️ Deleted Lane {sel_idx + 1}")
+                dialog.accept()
+            else:
+                QMessageBox.warning(dialog, "No Selection", "Please select a lane to delete.")
+        
+        btn_delete.clicked.connect(on_delete)
         dialog.exec_()
     
-    def start_edit_selected_lane(self, lane_idx, dialog):
-        """Start editing the selected lane"""
-        main = self._get_globals()
-        
-        if lane_idx < 0 or lane_idx >= len(main.LANE_CONFIGS):
-            QMessageBox.warning(self, "Invalid Selection", "Please select a lane to edit.")
-            return
-        
-        dialog.close()
-        
-        # Use lane selector to edit
-        if hasattr(self, 'lane_selector'):
-            from ui.lane_selector import LaneSelector
-            lane_editor = LaneSelector(self, edit_mode=True, lane_index=lane_idx)
-            lane_editor.exec_()
-            print(f"✏️ Editing lane {lane_idx + 1}")
-        else:
-            QMessageBox.information(self, "Edit Lane", 
-                f"Lane {lane_idx + 1} selected for editing.\nUse 'Delete Selected Lane' to remove it, then redraw.")
+    # show_edit_lane_dialog removed - use start_edit_lane instead
     
     def delete_selected_lane(self, lane_idx, dialog):
         """Delete the selected lane from dialog"""
@@ -409,3 +416,70 @@ class LaneHandlerMixin:
         proj_x = x1 + t * dx
         proj_y = y1 + t * dy
         return np.sqrt((px - proj_x)**2 + (py - proj_y)**2)
+    
+    def show_edit_lane_vehicle_types_dialog(self):
+        """Show dialog to edit only vehicle types (without keypoints)"""
+        main = self._get_globals()
+        
+        if not main.LANE_CONFIGS:
+            QMessageBox.information(self, "No Lanes", "No lanes configured yet. Please add lanes first.")
+            return
+        
+        dialog = QDialog(self)
+        dialog.setWindowTitle("Edit Lane Vehicle Types")
+        dialog.setMinimumSize(500, 400)
+        
+        layout = QVBoxLayout()
+        
+        # Lane list
+        lane_list = QListWidget()
+        for idx, lane in enumerate(main.LANE_CONFIGS, start=1):
+            allowed = lane.get('allowed_labels', lane.get('allowed_types', ['all']))
+            lane_list.addItem(f"Lane {idx}: {', '.join(allowed)}")
+        
+        # Select first by default
+        if lane_list.count() > 0:
+            lane_list.setCurrentRow(0)
+        
+        layout.addWidget(QLabel("<b>Select a lane to edit:</b>"))
+        layout.addWidget(lane_list)
+        
+        # Buttons
+        btn_layout = QHBoxLayout()
+        
+        btn_edit = QPushButton("Edit Vehicle Types")
+        btn_edit.clicked.connect(lambda: self._edit_lane_vehicle_types(lane_list.currentRow(), dialog))
+        btn_layout.addWidget(btn_edit)
+        
+        btn_close = QPushButton("Close")
+        btn_close.clicked.connect(dialog.close)
+        btn_layout.addWidget(btn_close)
+        
+        layout.addLayout(btn_layout)
+        dialog.setLayout(layout)
+        dialog.exec_()
+    
+    def _edit_lane_vehicle_types(self, lane_idx, dialog):
+        """Edit vehicle types for a specific lane"""
+        main = self._get_globals()
+        
+        if lane_idx < 0 or lane_idx >= len(main.LANE_CONFIGS):
+            QMessageBox.warning(self, "Invalid Selection", "Please select a lane to edit.")
+            return
+        
+        # Show vehicle type dialog
+        from ui.lane_selector import VehicleTypeDialog
+        vehicle_dialog = VehicleTypeDialog(self)
+        
+        # Pre-select current allowed types
+        current_allowed = main.LANE_CONFIGS[lane_idx].get('allowed_labels', [])
+        vehicle_dialog.set_selected(current_allowed)
+        
+        if vehicle_dialog.exec_() == vehicle_dialog.Accepted:
+            allowed = vehicle_dialog.get_selected()
+            main.LANE_CONFIGS[lane_idx]['allowed_labels'] = allowed
+            main.LANE_CONFIGS[lane_idx]['allowed_types'] = allowed
+            print(f"✏️ Lane {lane_idx + 1} updated: {', '.join(allowed)}")
+            self.status_label.setText(f"Status: Lane {lane_idx + 1} updated")
+            dialog.close()
+            self.update_lists()

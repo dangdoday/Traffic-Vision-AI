@@ -2,6 +2,7 @@
 Model Handler Mixin
 Contains methods for YOLO model loading and configuration management
 """
+import sys
 from PyQt5.QtWidgets import QMessageBox
 import torch
 
@@ -10,7 +11,11 @@ class ModelHandlerMixin:
     """Mixin class for model loading and configuration in MainWindow"""
     
     def _get_globals(self):
-        """Get globals from integrated_main - lazy import"""
+        """Get globals from the main module - handles both __main__ and integrated_main cases"""
+        if '__main__' in sys.modules:
+            main_module = sys.modules['__main__']
+            if hasattr(main_module, 'TL_ROIS') and hasattr(main_module, 'LANE_CONFIGS'):
+                return main_module
         import integrated_main
         return integrated_main
     
@@ -45,11 +50,13 @@ class ModelHandlerMixin:
             self.current_model_type = model_type
             self.current_model_config = get_model_config(model_type)
             
-            # Update thread model if thread exists and was already initialized
-            if hasattr(self, 'thread') and hasattr(self.thread, 'model_loaded'):
-                if self.thread.model_loaded:
-                    self.thread.set_model(self.yolo_model)
-                    self.thread.model_config = self.current_model_config
+            # Update thread model if thread exists (always update, not just when model_loaded)
+            # ⚠️ FIX: Check that thread is our VideoThread object, not QThread.thread() method
+            from core import VideoThread
+            if hasattr(self, 'thread') and self.thread is not None and isinstance(self.thread, VideoThread):
+                self.thread.set_model(self.yolo_model)
+                self.thread.model_config = self.current_model_config
+                print(f"✅ Model also set in VideoThread")
             
             # Update spinboxes with model's default values
             if hasattr(self, 'imgsz_spinbox'):

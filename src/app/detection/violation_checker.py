@@ -16,6 +16,7 @@ def set_violation_checker_globals(tl_rois_ref, direction_rois_ref, vehicle_direc
     TL_ROIS = tl_rois_ref
     DIRECTION_ROIS = direction_rois_ref
     VEHICLE_DIRECTIONS = vehicle_directions_ref
+    print(f"✅ [violation_checker] Globals linked: TL_ROIS id={id(TL_ROIS)}, len={len(TL_ROIS)}")
 
 
 def check_speed_violation(speed_kmh, speed_limit=50):
@@ -87,6 +88,14 @@ def check_tl_violation(track_id, vehicle_direction):
     - Xe rẽ phải: Return OK ngay (luôn được phép khi đèn đỏ)
     """
     global TL_ROIS, VEHICLE_DIRECTIONS
+    
+    # Debug: Log TL_ROIS state (only on first call per session)
+    if not hasattr(check_tl_violation, '_debug_logged'):
+        check_tl_violation._debug_logged = True
+        print(f"🔍 [violation_checker] TL_ROIS count: {len(TL_ROIS)}, id={id(TL_ROIS)}")
+        if len(TL_ROIS) > 0:
+            for i, roi in enumerate(TL_ROIS):
+                print(f"   TL {i}: type={roi[4]}, color={roi[5]}")
     
     if len(TL_ROIS) == 0:
         return (False, "No traffic lights configured")

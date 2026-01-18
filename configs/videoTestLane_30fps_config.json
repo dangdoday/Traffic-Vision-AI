@@ -88,16 +88,7 @@
       ]
     }
   ],
-  "stopline": {
-    "p1": [
-      490,
-      477
-    ],
-    "p2": [
-      1575,
-      513
-    ]
-  },
+  "stopline": null,
   "traffic_lights": [],
   "direction_zones": [],
   "reference_vector": null,

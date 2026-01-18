@@ -1,0 +1,303 @@
+\chapter{Cơ sở lý thuyết: Nhận diện biển số xe}
+\label{ch:ly_thuyet_alpr}
+
+\section{Tổng quan về ALPR}
+Hệ thống nhận diện biển số xe tự động (Automatic License Plate Recognition - ALPR) thường bao gồm hai giai đoạn chính:
+\begin{enumerate}
+    \item \textbf{Plate Detection:} Xác định vị trí biển số trong ảnh
+    \item \textbf{Character Recognition (OCR):} Nhận dạng các ký tự trên biển số
+\end{enumerate}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        node distance=2cm,
+        box/.style={rectangle, draw, rounded corners, minimum width=3cm, minimum height=1cm, align=center, fill=blue!10},
+        arrow/.style={->, thick, >=stealth}
+    ]
+        \node[box] (input) {Ảnh đầu vào};
+        \node[box, right=of input] (detect) {Plate\\Detection};
+        \node[box, right=of detect] (preprocess) {Tiền xử lý\\(CLAHE)};
+        \node[box, right=of preprocess] (ocr) {OCR};
+        \node[box, right=of ocr] (output) {Biển số};
+
+        \draw[arrow] (input) -- (detect);
+        \draw[arrow] (detect) -- (preprocess);
+        \draw[arrow] (preprocess) -- (ocr);
+        \draw[arrow] (ocr) -- (output);
+    \end{tikzpicture}
+    \caption{Pipeline tổng quan của hệ thống ALPR}
+    \label{fig:alpr_pipeline}
+\end{figure}
+
+\section{Biển số xe Việt Nam}
+
+\subsection{Các định dạng biển số}
+Biển số xe Việt Nam có các định dạng chính sau:
+
+\begin{table}[!ht]
+\centering
+\caption{Các định dạng biển số xe Việt Nam}
+\label{tab:vn_plate_format}
+\begin{tabular}{|c|l|l|}
+\hline
+\textbf{Loại} & \textbf{Định dạng} & \textbf{Ví dụ} \\ \hline
+Xe ô tô (1 dòng) & XX-Y XXXXX & 30G-07784 \\ \hline
+Xe ô tô (2 dòng) & XX-Y / XXXXX & 30G / 07784 \\ \hline
+Xe máy & XX-YY / XXX.XX & 29-H1 / 234.56 \\ \hline
+\end{tabular}
+\end{table}
+
+Trong đó:
+\begin{itemize}
+    \item 2 chữ số đầu: Mã tỉnh/thành phố (VD: 30 = Hà Nội, 29 = Hà Nội cũ, 51 = TP.HCM)
+    \item Chữ cái: Ký hiệu seri (A-Z, trừ I, O, Q)
+    \item 5 chữ số cuối: Số thứ tự đăng ký
+\end{itemize}
+
+\subsection{Thách thức nhận diện biển số Việt Nam}
+Việc nhận diện biển số Việt Nam gặp một số thách thức đặc thù:
+\begin{itemize}
+    \item \textbf{Đa dạng định dạng:} Biển số có thể là 1 dòng hoặc 2 dòng, với các kích thước khác nhau
+    \item \textbf{Font chữ đặc thù:} Font chữ trên biển số Việt Nam có một số điểm khác biệt
+    \item \textbf{Điều kiện thực tế:} Biển số thường bị bẩn, mờ, hoặc nghiêng do góc quay camera
+    \item \textbf{Ánh sáng:} Độ phản chiếu của biển số thay đổi theo điều kiện ánh sáng
+\end{itemize}
+
+\section{PaddleOCR - Nhận dạng ký tự}
+
+\subsection{Giới thiệu PaddleOCR}
+PaddleOCR là một bộ công cụ OCR mã nguồn mở được phát triển bởi PaddlePaddle (Baidu). PaddleOCR hỗ trợ nhận dạng văn bản đa ngôn ngữ với độ chính xác cao và tốc độ xử lý nhanh, phù hợp cho các ứng dụng thời gian thực.
+
+\subsection{Kiến trúc CRNN}
+PaddleOCR sử dụng kiến trúc CRNN (Convolutional Recurrent Neural Network) bao gồm:
+\begin{enumerate}
+    \item \textbf{CNN Backbone:} Trích xuất đặc trưng không gian từ ảnh đầu vào. Backbone thường sử dụng là MobileNet hoặc ResNet biến thể.
+    \item \textbf{Sequence Modeling (LSTM):} Mô hình hóa quan hệ tuần tự giữa các ký tự. Sử dụng Bidirectional LSTM để capture thông tin từ cả hai hướng.
+    \item \textbf{CTC Decoder:} Giải mã chuỗi ký tự cuối cùng từ output của LSTM.
+\end{enumerate}
+
+\begin{figure}[H]
+    \centering
+    \begin{tikzpicture}[
+        node distance=1.8cm,
+        box/.style={rectangle, draw, rounded corners, minimum width=2.8cm, minimum height=1cm, align=center, fill=green!10},
+        arrow/.style={->, thick, >=stealth}
+    ]
+        \node[box] (input) {Ảnh biển số\\$H \times W \times 3$};
+        \node[box, right=of input] (cnn) {CNN\\Backbone};
+        \node[box, right=of cnn] (lstm) {Bi-LSTM\\$T \times D$};
+        \node[box, right=of lstm] (ctc) {CTC\\Decoder};
+        \node[box, right=of ctc] (output) {``30G07784''};
+
+        \draw[arrow] (input) -- (cnn);
+        \draw[arrow] (cnn) -- (lstm);
+        \draw[arrow] (lstm) -- (ctc);
+        \draw[arrow] (ctc) -- (output);
+    \end{tikzpicture}
+    \caption{Kiến trúc CRNN cho OCR trong PaddleOCR}
+    \label{fig:crnn_arch}
+\end{figure}
+
+\subsection{CTC Loss}
+CTC (Connectionist Temporal Classification) cho phép huấn luyện mà không cần alignment giữa input và output. Đây là đặc điểm quan trọng vì ta không biết chính xác vị trí của từng ký tự trên ảnh.
+
+Xác suất của một chuỗi output $\mathbf{l}$ được tính:
+\begin{equation}
+    P(\mathbf{l} | \mathbf{x}) = \sum_{\pi \in \mathcal{B}^{-1}(\mathbf{l})} P(\pi | \mathbf{x})
+\end{equation}
+
+Trong đó $\mathcal{B}^{-1}(\mathbf{l})$ là tập tất cả các path có thể tạo ra $\mathbf{l}$ sau khi loại bỏ ký tự blank và ký tự lặp.
+
+\textbf{Ví dụ:} Với chuỗi mục tiêu ``AB'', các path hợp lệ có thể là:
+\begin{itemize}
+    \item ``A-A-B-B'' $\rightarrow$ ``AB'' (loại bỏ lặp)
+    \item ``A--B-'' $\rightarrow$ ``AB'' (loại bỏ blank `-')
+    \item ``-A-B-'' $\rightarrow$ ``AB''
+\end{itemize}
+
+CTC Loss được tính bằng negative log-likelihood:
+\begin{equation}
+    \mathcal{L}_{CTC} = -\log P(\mathbf{l} | \mathbf{x})
+\end{equation}
+
+\section{Tiền xử lý ảnh biển số}
+
+Chất lượng ảnh biển số ảnh hưởng trực tiếp đến độ chính xác của OCR. Chúng tôi áp dụng các kỹ thuật tiền xử lý sau:
+
+\subsection{CLAHE - Cân bằng histogram thích ứng}
+CLAHE (Contrast Limited Adaptive Histogram Equalization) là kỹ thuật cải thiện độ tương phản ảnh, đặc biệt hiệu quả cho ảnh có độ sáng không đều.
+
+\subsubsection{Nguyên lý hoạt động}
+\begin{enumerate}
+    \item \textbf{Chia tile:} Chia ảnh thành các tile nhỏ (VD: 8×8 pixels)
+    \item \textbf{Histogram Equalization cục bộ:} Thực hiện histogram equalization trên từng tile
+    \item \textbf{Clip Limit:} Giới hạn độ tương phản (clip limit) để tránh khuếch đại noise. Nếu histogram bin vượt quá clip limit, phần dư sẽ được phân bố lại đều cho các bin khác.
+    \item \textbf{Bilinear Interpolation:} Nội suy bilinear để ghép các tile lại một cách mượt mà, tránh hiện tượng blocking artifact.
+\end{enumerate}
+
+\subsubsection{Công thức toán học}
+Công thức histogram equalization cho một pixel:
+\begin{equation}
+    s_k = (L-1) \cdot \sum_{j=0}^{k} p_r(r_j) = (L-1) \cdot \text{CDF}(r_k)
+\end{equation}
+
+Trong đó:
+\begin{itemize}
+    \item $s_k$: Mức xám mới của pixel
+    \item $L$: Số mức xám (256 cho ảnh 8-bit)
+    \item $p_r(r_j)$: Xác suất xuất hiện của mức xám $r_j$
+    \item CDF: Cumulative Distribution Function của histogram
+\end{itemize}
+
+\textbf{Clip Limit trong CLAHE:}
+\begin{equation}
+    \beta = \frac{M \times N}{L} \times \text{clipLimit}
+\end{equation}
+Trong đó $M \times N$ là kích thước tile và clipLimit là tham số (thường từ 2.0 đến 4.0).
+
+\subsection{Sharpening - Làm sắc nét}
+Bộ lọc làm sắc nét giúp tăng cường các cạnh của ký tự, làm cho chúng rõ ràng hơn trước khi đưa vào OCR.
+
+\subsubsection{Kernel Sharpening}
+Chúng tôi sử dụng kernel convolution để làm sắc nét:
+\begin{equation}
+    K_{sharpen} = \begin{bmatrix}
+        0 & -1 & 0 \\
+        -1 & 5 & -1 \\
+        0 & -1 & 0
+    \end{bmatrix}
+\end{equation}
+
+\subsubsection{Nguyên lý}
+Kernel này hoạt động bằng cách:
+\begin{itemize}
+    \item Nhân pixel trung tâm với hệ số lớn (5)
+    \item Trừ đi trung bình của 4 pixel lân cận
+    \item Kết quả: tăng cường sự khác biệt giữa pixel và các pixel xung quanh $\rightarrow$ cạnh sắc nét hơn
+\end{itemize}
+
+Công thức tính pixel mới:
+\begin{equation}
+    I'(x,y) = 5 \cdot I(x,y) - [I(x-1,y) + I(x+1,y) + I(x,y-1) + I(x,y+1)]
+\end{equation}
+
+\subsection{Quy trình tiền xử lý hoàn chỉnh}
+\begin{enumerate}
+    \item \textbf{Crop ảnh biển số:} Từ kết quả detection của YOLOv8
+    \item \textbf{Chuyển Grayscale:} Để áp dụng CLAHE
+    \item \textbf{Áp dụng CLAHE:} Với \texttt{clipLimit=2.0}, \texttt{tileGridSize=(8,8)}
+    \item \textbf{Chuyển về RGB:} Để đưa vào PaddleOCR
+    \item \textbf{Sharpening (tùy chọn):} Áp dụng nếu ảnh còn mờ
+\end{enumerate}
+
+\section{So sánh các phiên bản YOLOv8}
+
+Trong đề tài này, chúng tôi sử dụng \textbf{YOLOv8n} (nano) cho cả phát hiện phương tiện và phát hiện biển số vì yêu cầu cân bằng giữa tốc độ và độ chính xác.
+
+\begin{table}[!ht]
+\centering
+\caption{So sánh các phiên bản YOLOv8}
+\label{tab:yolov8_versions}
+\begin{tabular}{|c|c|c|c|}
+\hline
+\textbf{Model} & \textbf{Params (M)} & \textbf{FLOPs (G)} & \textbf{mAP@50 (COCO)} \\ \hline
+YOLOv8n & 3.2 & 8.7 & 37.3 \\ \hline
+YOLOv8s & 11.2 & 28.6 & 44.9 \\ \hline
+YOLOv8m & 25.9 & 78.9 & 50.2 \\ \hline
+YOLOv8l & 43.7 & 165.2 & 52.9 \\ \hline
+YOLOv8x & 68.2 & 257.8 & 53.9 \\ \hline
+\end{tabular}
+\end{table}
+
+\textbf{Lý do chọn YOLOv8n:}
+\begin{itemize}
+    \item Số lượng tham số nhỏ (3.2M) $\rightarrow$ phù hợp triển khai trên phần cứng phổ thông
+    \item FLOPs thấp (8.7G) $\rightarrow$ tốc độ inference cao
+    \item Đối với bài toán phát hiện biển số (single class, đối tượng tương đối dễ nhận diện), YOLOv8n đủ để đạt độ chính xác cao
+\end{itemize}
+
+\section{Cơ chế Validation \& Retry}
+
+\subsection{Vấn đề với OCR đơn frame}
+OCR có thể cho kết quả khác nhau giữa các frame do:
+\begin{itemize}
+    \item Biển số bị rung, blur khi xe di chuyển
+    \item Ánh sáng thay đổi (phản chiếu, bóng)
+    \item Góc nhìn thay đổi khi xe tiến lại gần camera
+    \item Nhiễu từ mô hình OCR
+\end{itemize}
+
+\subsection{Giải pháp: Format Validation}
+Thay vì lưu trữ nhiều kết quả và voting, chúng tôi sử dụng phương pháp validate format biển số Việt Nam:
+
+\begin{algorithm}[!ht]
+\SetAlgoLined
+\KwIn{$ocr\_text$: Kết quả OCR, $vehicle\_class$: Loại xe}
+\KwOut{$(is\_valid, cleaned\_plate)$: Kết quả validation}
+
+$cleaned \leftarrow$ RemoveSpaces($ocr\_text$)\;
+\eIf{$vehicle\_class$ \in \{motorbike, bicycle\}}{
+    $pattern \leftarrow$ ``\^{}[0-9]\{2\}[A-Z][A-Z0-9][0-9]\{4,5\}\$''\;
+    $min\_len \leftarrow 8$, $max\_len \leftarrow 9$\;
+}{
+    $pattern \leftarrow$ ``\^{}[0-9]\{2\}[A-Z][0-9]\{4,5\}\$''\;
+    $min\_len \leftarrow 7$, $max\_len \leftarrow 8$\;
+}
+\If{$min\_len \leq$ len($cleaned$) $\leq max\_len$ AND Match($pattern$, $cleaned$)}{
+    \Return $(True, cleaned)$\;
+}
+\Return $(False, cleaned)$\;
+\caption{Thuật toán Validation biển số Việt Nam}
+\label{alg:validation}
+\end{algorithm}
+
+\subsection{Retry Mechanism}
+Khi kết quả OCR không đúng format, hệ thống sẽ retry ở frame tiếp theo:
+\begin{itemize}
+    \item Chỉ lưu kết quả \textbf{đã validate} (đúng format)
+    \item Nếu OCR sai format hoặc không đọc được $\rightarrow$ không lưu, thử lại frame sau
+    \item Khi đã có kết quả hợp lệ $\rightarrow$ không xử lý OCR nữa (tiết kiệm tài nguyên)
+\end{itemize}
+
+\begin{equation}
+    \text{ShouldRunOCR}(track\_id) = \begin{cases}
+        \text{True} & \text{nếu chưa có kết quả valid} \\
+        \text{False} & \text{nếu đã có kết quả valid}
+    \end{cases}
+\end{equation}
+
+\section{Character Correction cho biển số Việt Nam}
+
+\subsection{Các lỗi phổ biến của OCR}
+Do một số ký tự có hình dáng tương tự, PaddleOCR có thể nhầm lẫn:
+
+\begin{table}[!ht]
+\centering
+\caption{Bảng hiệu chỉnh ký tự phổ biến}
+\label{tab:char_correction}
+\begin{tabular}{|c|c|l|}
+\hline
+\textbf{Sai} & \textbf{Đúng} & \textbf{Điều kiện} \\ \hline
+0 (số không) & O (chữ O) & Vị trí chữ cái (index 2) \\ \hline
+O (chữ O) & 0 (số không) & Vị trí chữ số \\ \hline
+1 (số một) & I (chữ I) & Vị trí chữ cái \\ \hline
+8 (số tám) & B (chữ B) & Vị trí chữ cái \\ \hline
+5 (số năm) & S (chữ S) & Vị trí chữ cái \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{Logic hiệu chỉnh dựa trên định dạng}
+Dựa trên cấu trúc biển số Việt Nam (ví dụ: 30G-07784):
+\begin{itemize}
+    \item \textbf{Vị trí 0-1:} Bắt buộc là chữ số (mã tỉnh)
+    \item \textbf{Vị trí 2:} Bắt buộc là chữ cái (seri)
+    \item \textbf{Vị trí 3-7:} Bắt buộc là chữ số (số thứ tự)
+\end{itemize}
+
+Thuật toán hiệu chỉnh:
+\begin{enumerate}
+    \item Kiểm tra độ dài chuỗi OCR
+    \item Tại mỗi vị trí, kiểm tra xem ký tự có đúng loại (chữ/số) không
+    \item Nếu sai loại, tra bảng mapping để sửa
+\end{enumerate}

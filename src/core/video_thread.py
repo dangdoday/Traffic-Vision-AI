@@ -4,6 +4,7 @@ Video Thread - Xử lý video và detection trong background thread
 import cv2
 import numpy as np
 import time
+import re
 from PyQt5.QtCore import QThread, pyqtSignal
 
 from core import VehicleTracker, ViolationDetector, StopLineManager, TrafficLightManager
@@ -17,6 +18,82 @@ except Exception as e:
     print(f"⚠️ PaddleOCR not available: {e}")
     print("   Install: pip install paddleocr paddlepaddle")
     PADDLE_OCR_AVAILABLE = False
+
+
+def validate_license_plate(plate_text, vehicle_class):
+    """
+    Validate Vietnamese license plate format.
+    
+    Xe máy (cls_id 2, 3):
+        - Format: xxyzxxxxx (8-9 ký tự)
+        - xx = 2 số đầu
+        - y = 1 chữ cái
+        - z = số hoặc chữ
+        - 4-5 số cuối
+        - Ví dụ: 29B12345, 30M04019, 29B1-23456
+    
+    Ô tô (cls_id 0, 1, 4):
+        - Format: xxyxxxxx (7-8 ký tự)
+        - xx = 2 số đầu
+        - y = 1 chữ cái
+        - 4-5 số tiếp theo
+        - Ví dụ: 51A1234, 30H12345
+    
+    Args:
+        plate_text: OCR text from plate
+        vehicle_class: Vehicle class ID (0=car, 1=bus, 2=bicycle, 3=motorbike, 4=truck)
+    
+    Returns:
+        (is_valid, cleaned_plate): Tuple of validation result and cleaned plate text
+    """
+    if not plate_text:
+        return (False, "")
+    
+    # Clean the text: remove spaces, dashes, dots, convert to uppercase
+    cleaned = re.sub(r'[\s\-\.\,]', '', plate_text.upper())
+    
+    # Check if it's motorbike (xe máy, xe đạp) or car (ô tô, xe bus, xe tải)
+    is_motorbike = vehicle_class in [2, 3]  # xe đạp, xe máy
+    is_car = vehicle_class in [0, 1, 4]  # ô tô, xe bus, xe tải
+    
+    if is_motorbike:
+        # Xe máy: 8-9 ký tự
+        # Pattern: 2 số + 1 chữ + 1 số/chữ + 4-5 số
+        # Ví dụ: 29B12345, 30M04019, 29B1A2345
+        if len(cleaned) < 8 or len(cleaned) > 9:
+            return (False, cleaned)
+        
+        # Check pattern: ^[0-9]{2}[A-Z][A-Z0-9][0-9]{4,5}$
+        pattern = r'^[0-9]{2}[A-Z][A-Z0-9][0-9]{4,5}$'
+        if re.match(pattern, cleaned):
+            return (True, cleaned)
+        else:
+            return (False, cleaned)
+    
+    elif is_car:
+        # Ô tô: 7-8 ký tự
+        # Pattern: 2 số + 1 chữ + 4-5 số
+        # Ví dụ: 51A1234, 30H12345
+        if len(cleaned) < 7 or len(cleaned) > 8:
+            return (False, cleaned)
+        
+        # Check pattern: ^[0-9]{2}[A-Z][0-9]{4,5}$
+        pattern = r'^[0-9]{2}[A-Z][0-9]{4,5}$'
+        if re.match(pattern, cleaned):
+            return (True, cleaned)
+        else:
+            return (False, cleaned)
+    
+    # Unknown vehicle type - use generic validation
+    # Accept 7-9 characters starting with 2 digits and a letter
+    if len(cleaned) < 7 or len(cleaned) > 9:
+        return (False, cleaned)
+    
+    pattern = r'^[0-9]{2}[A-Z][A-Z0-9]?[0-9]{4,5}$'
+    if re.match(pattern, cleaned):
+        return (True, cleaned)
+    
+    return (False, cleaned)
 
 
 class VideoThread(QThread):
@@ -67,6 +144,11 @@ class VideoThread(QThread):
         # YOLO Direct mode: Map vehicle track_id to plate track_id
         # Format: {vehicle_track_id: plate_track_id}
         self.vehicle_to_plate_map = {}
+        
+        # Violator trajectory tracking
+        # Format: {track_id: [(x, y), (x, y), ...]}
+        self.violator_trajectories = {}
+        self.show_violator_trajectories = True  # Toggle to show/hide trajectories
         
         # Initialize PaddleOCR
         self.ocr = None
@@ -158,24 +240,28 @@ class VideoThread(QThread):
             if len(processed.shape) == 2:
                 processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
             
-            # Run OCR
-            result = self.ocr.predict(processed)
+            # Run OCR using correct PaddleOCR API
+            result = self.ocr.ocr(processed, cls=False)
             
-            # New PaddleOCR format returns dict with 'rec_texts' key
-            if result and len(result) > 0:
-                result_dict = result[0]
-                if isinstance(result_dict, dict) and 'rec_texts' in result_dict:
-                    texts = result_dict['rec_texts']
-                    scores = result_dict.get('rec_scores', [])
-                    
-                    # Filter by confidence and join
-                    filtered_texts = []
-                    for i, text in enumerate(texts):
-                        conf = scores[i] if i < len(scores) else 1.0
-                        if conf > 0.5:  # Min confidence threshold
-                            filtered_texts.append(str(text).strip())
-                    
-                    return "".join(filtered_texts).replace(" ", "").replace(".", "")
+            # PaddleOCR returns list of lines, each with [(bbox, (text, confidence))]
+            if result and len(result) > 0 and result[0]:
+                texts = []
+                scores = []
+                
+                for line in result[0]:
+                    if line and len(line) >= 2:
+                        text_info = line[1]  # (text, confidence)
+                        if isinstance(text_info, (list, tuple)) and len(text_info) >= 2:
+                            text = str(text_info[0]).strip()
+                            conf = float(text_info[1])
+                            
+                            if conf > 0.5:  # Min confidence threshold
+                                texts.append(text)
+                                scores.append(conf)
+                
+                if texts:
+                    final_text = "".join(texts).replace(" ", "").replace(".", "")
+                    return final_text
             
             return ""
             
@@ -334,17 +420,25 @@ class VideoThread(QThread):
             frame: Frame with drawings (same as input)
         """
         if not self.globals_ref:
+            print("⚠️ globals_ref is None!")
             return frame
         
         # Keep original frame size for display and OCR
         frame_original = frame
         orig_h, orig_w = frame.shape[:2]
         
+        # Debug: First call
+        if not hasattr(self, '_debug_first_detection'):
+            self._debug_first_detection = True
+            print(f"✅ First detection call - Frame size: {orig_w}x{orig_h}")
+            print(f"   Model config: {self.model_config}")
+        
         # Get global state references
         ALLOWED_VEHICLE_IDS = self.globals_ref['ALLOWED_VEHICLE_IDS']
         VEHICLE_CLASSES = self.globals_ref['VEHICLE_CLASSES']
         LANE_CONFIGS = self.globals_ref['LANE_CONFIGS']
         TL_ROIS = self.globals_ref['TL_ROIS']
+        DIRECTION_ROIS = self.globals_ref.get('DIRECTION_ROIS', [])
         # Don't cache _show_all_boxes - read it fresh each time to get latest value
         is_on_stop_line = self.globals_ref['is_on_stop_line']
         check_tl_violation = self.globals_ref['check_tl_violation']
@@ -354,6 +448,7 @@ class VideoThread(QThread):
         VIOLATOR_TRACK_IDS = self.globals_ref['VIOLATOR_TRACK_IDS']
         RED_LIGHT_VIOLATORS = self.globals_ref['RED_LIGHT_VIOLATORS']
         LANE_VIOLATORS = self.globals_ref['LANE_VIOLATORS']
+        DIRECTION_VIOLATORS = self.globals_ref.get('DIRECTION_VIOLATORS', set())
         PASSED_VEHICLES = self.globals_ref['PASSED_VEHICLES']
         MOTORBIKE_COUNT = self.globals_ref['MOTORBIKE_COUNT']
         CAR_COUNT = self.globals_ref['CAR_COUNT']
@@ -416,6 +511,13 @@ class VideoThread(QThread):
         # Works for both YOLO Direct and Relative Tracking modes
         self.current_frame_count += 1
         
+        # Debug: Log detections periodically
+        if not hasattr(self, '_debug_frame_count'):
+            self._debug_frame_count = 0
+        self._debug_frame_count += 1
+        if self._debug_frame_count % 30 == 0:  # Every 30 frames
+            print(f"📊 Detection stats: {len(vehicles)} vehicles, {len(license_plates)} plates")
+        
         current_vehicle_ids = set()
         for veh in vehicles:
             if veh["track_id"] != -1:
@@ -450,6 +552,7 @@ class VideoThread(QThread):
             # If found matching vehicle (plate 100% inside)
             if best_match:
                 veh_track_id = best_match["track_id"]
+                veh_cls_id = best_match["cls_id"]  # Get vehicle class for plate validation
                 veh_x1, veh_y1, veh_x2, veh_y2 = best_match["box"]
                 
                 veh_w = veh_x2 - veh_x1
@@ -465,19 +568,29 @@ class VideoThread(QThread):
                         # Debug: Print mapping info
                         print(f"📍 Mapped Plate ID:{plate_track_id} → Vehicle ID:{veh_track_id}")
                         
-                        # Check if vehicle already has OCR text
-                        if veh_track_id not in self.vehicle_ocr_texts:
+                        # Check if vehicle already has VALID OCR text (not empty string)
+                        existing_plate = self.vehicle_ocr_texts.get(veh_track_id)
+                        if existing_plate and existing_plate != "":
+                            # Already have valid plate, skip OCR
+                            pass
+                        else:
                             print(f"🔍 Attempting OCR for Vehicle ID:{veh_track_id} (ocr={self.ocr is not None}, enable_ocr={self.enable_ocr})")
                             # Run OCR on plate (crop from original frame)
                             if self.ocr is not None and self.enable_ocr:
                                 plate_bbox = (int(plate_x1), int(plate_y1), int(plate_x2), int(plate_y2))
                                 ocr_text = self.recognize_plate_text(frame_original, plate_bbox)
                                 if ocr_text:
-                                    self.vehicle_ocr_texts[veh_track_id] = ocr_text
-                                    print(f"🔤 OCR [YOLO Direct] Vehicle ID:{veh_track_id} → '{ocr_text}'")
+                                    # Validate plate format based on vehicle class
+                                    is_valid, cleaned_plate = validate_license_plate(ocr_text, veh_cls_id)
+                                    if is_valid:
+                                        self.vehicle_ocr_texts[veh_track_id] = cleaned_plate
+                                        print(f"✅ OCR [VALID] Vehicle ID:{veh_track_id} → '{cleaned_plate}'")
+                                    else:
+                                        # Invalid plate format, don't store, try again next frame
+                                        print(f"❌ OCR [INVALID FORMAT] Vehicle ID:{veh_track_id} → '{ocr_text}' (cleaned: '{cleaned_plate}')")
                                 else:
-                                    self.vehicle_ocr_texts[veh_track_id] = ""  # Mark as attempted
-                                    print(f"⚠️ OCR [YOLO Direct] Vehicle ID:{veh_track_id} → No text detected")
+                                    # No text detected, don't mark as attempted so we can try again
+                                    print(f"⚠️ OCR [NO TEXT] Vehicle ID:{veh_track_id} → Retrying next frame")
                             else:
                                 print(f"❌ OCR disabled or not initialized")
                     
@@ -502,18 +615,24 @@ class VideoThread(QThread):
                             abs_w = int(plate_w)
                             abs_h = int(plate_h)
                             
-                            # Run OCR on plate ONLY if this vehicle doesn't have text yet
+                            # Run OCR on plate ONLY if this vehicle doesn't have VALID text yet
                             ocr_text = ""
                             if veh_track_id in self.vehicle_plate_positions:
-                                # Keep existing OCR text if available
+                                # Keep existing OCR text if available and valid
                                 ocr_text = self.vehicle_plate_positions[veh_track_id].get('ocr_text', '')
                             
-                            # Only run OCR if no text exists yet AND OCR is enabled
+                            # Only run OCR if no valid text exists yet AND OCR is enabled
                             if not ocr_text and self.ocr is not None and self.enable_ocr:
                                 plate_bbox = (int(plate_x1), int(plate_y1), int(plate_x2), int(plate_y2))
-                                ocr_text = self.recognize_plate_text(frame_original, plate_bbox)
-                                if ocr_text:
-                                    print(f"🔤 OCR [Relative] Vehicle ID:{veh_track_id} → '{ocr_text}'")
+                                raw_ocr_text = self.recognize_plate_text(frame_original, plate_bbox)
+                                if raw_ocr_text:
+                                    # Validate plate format based on vehicle class
+                                    is_valid, cleaned_plate = validate_license_plate(raw_ocr_text, veh_cls_id)
+                                    if is_valid:
+                                        ocr_text = cleaned_plate
+                                        print(f"✅ OCR [Relative VALID] Vehicle ID:{veh_track_id} → '{cleaned_plate}'")
+                                    else:
+                                        print(f"❌ OCR [Relative INVALID] Vehicle ID:{veh_track_id} → '{raw_ocr_text}' (retry next frame)")
                             
                             # Store or update relative position
                             self.vehicle_plate_positions[veh_track_id] = {
@@ -523,7 +642,7 @@ class VideoThread(QThread):
                                 'abs_h': abs_h,  # Absolute height (pixels)
                                 'conf': plate["conf"],
                                 'last_updated_frame': self.current_frame_count,
-                                'ocr_text': ocr_text  # OCR recognized text
+                                'ocr_text': ocr_text  # OCR recognized text (only if valid)
                             }
         
         # Clean up plates for vehicles that are no longer tracked
@@ -582,32 +701,87 @@ class VideoThread(QThread):
                             # Update globals for backward compatibility
                             RED_LIGHT_VIOLATORS.add(track_id)
                             VIOLATOR_TRACK_IDS.add(track_id)
-                            print(f"🚨 TL VIOLATION: {vehicle_label} (ID={track_id}) Dir={vehicle_direction} - {reason}")
+                            # Get license plate if available
+                            plate_text = self.vehicle_ocr_texts.get(track_id, '')
+                            plate_info = f" | Bien so: {plate_text}" if plate_text else " | Bien so: Chua doc duoc"
+                            print(f"🚨 TL VIOLATION: {vehicle_label} (ID={track_id}) Dir={vehicle_direction}{plate_info} - {reason}")
                         else:
                             print(f"✅ Vehicle passed: {vehicle_label} (ID={track_id}) Dir={vehicle_direction} - {reason}")
+                        
+                        # ⚠️ CRITICAL: Check direction violation ONCE when crossing stopline
+                        # Find which ROI the vehicle is in AT THE MOMENT of crossing
+                        if DIRECTION_ROIS and vehicle_direction != 'unknown':
+                            for roi_idx, roi in enumerate(DIRECTION_ROIS):
+                                roi_points = roi.get('points', [])
+                                if not roi_points:
+                                    continue
+                                
+                                if point_in_polygon((cx, cy), roi_points):
+                                    # Get allowed directions for this ROI
+                                    allowed_dirs = roi.get('allowed_directions', [])
+                                    if not allowed_dirs:
+                                        # Fallback to legacy format
+                                        primary_dir = roi.get('primary_direction', 'straight')
+                                        secondary_dirs = roi.get('secondary_directions', [])
+                                        allowed_dirs = [primary_dir] + secondary_dirs
+                                    
+                                    # If allowed_dirs is empty or contains 'all', skip violation check
+                                    if not allowed_dirs or 'all' in allowed_dirs:
+                                        break
+                                    
+                                    # Check if vehicle direction is allowed
+                                    if vehicle_direction not in allowed_dirs:
+                                        self.violation_detector.add_violation(track_id, 'direction')
+                                        DIRECTION_VIOLATORS.add(track_id)
+                                        VIOLATOR_TRACK_IDS.add(track_id)
+                                        plate_text = self.vehicle_ocr_texts.get(track_id, '')
+                                        plate_info = f" | Bien so: {plate_text}" if plate_text else " | Bien so: Chua doc duoc"
+                                        roi_name = roi.get('name', f'ROI_{roi_idx}')
+                                        print(f"🚨 DIRECTION VIOLATION: {vehicle_label} (ID={track_id}) went {vehicle_direction} in {roi_name} (allowed: {allowed_dirs}){plate_info}")
+                                    break
             
-            # Check lane violation
+            # Check lane violation (does NOT require stopline)
             for lane in LANE_CONFIGS:
                 poly = lane["poly"]
-                allowed = lane.get("allowed_labels", ["all"])
+                # Support both 'allowed_types' (from config) and 'allowed_labels' (legacy)
+                allowed = lane.get("allowed_types", lane.get("allowed_labels", []))
                 
                 if point_in_polygon((cx, cy), poly):
                     # Check if vehicle type is allowed in this lane
-                    if "all" not in allowed and vehicle_label not in allowed:
-                        if not self.violation_detector.lane_violators.__contains__(track_id):
+                    # If allowed is empty list [] or contains "all", all vehicles are allowed
+                    # If allowed has specific types, only those are allowed
+                    is_all_allowed = len(allowed) == 0 or "all" in allowed
+                    if not is_all_allowed and vehicle_label not in allowed:
+                        if track_id not in LANE_VIOLATORS:
                             self.violation_detector.add_violation(track_id, 'lane')
                             # Update globals for backward compatibility
                             LANE_VIOLATORS.add(track_id)
                             VIOLATOR_TRACK_IDS.add(track_id)
-                            print(f"🚨 LANE VIOLATION: {vehicle_label} (ID={track_id}) in restricted lane!")
+                            # Get license plate if available
+                            plate_text = self.vehicle_ocr_texts.get(track_id, '')
+                            plate_info = f" | Bien so: {plate_text}" if plate_text else " | Bien so: Chua doc duoc"
+                            print(f"🚨 LANE VIOLATION: {vehicle_label} (ID={track_id}) not allowed in lane (allowed: {allowed}){plate_info}")
                     break
             
             # Draw vehicle (respect _show_all_boxes flag)
             is_violator = self.violation_detector.is_violator(track_id)
+            is_lane_violator = track_id in LANE_VIOLATORS
+            is_tl_violator = track_id in RED_LIGHT_VIOLATORS
+            is_direction_violator = track_id in DIRECTION_VIOLATORS
             
-            # ⚠️ CRITICAL: Only show RED box if vehicle is violator AND has passed stopline
+            # ⚠️ Lane violations show immediately (no stopline needed)
+            # ⚠️ TL violations and Direction violations only show after passing stopline
             has_passed_stopline = track_id in PASSED_VEHICLES
-            show_as_violator = is_violator and has_passed_stopline
+            show_as_violator = is_lane_violator or is_direction_violator or (is_tl_violator and has_passed_stopline)
+            
+            # Track trajectory for violators
+            if show_as_violator:
+                if track_id not in self.violator_trajectories:
+                    self.violator_trajectories[track_id] = []
+                self.violator_trajectories[track_id].append((cx, cy))
+                # Limit trajectory points to avoid memory issues (keep last 200 points)
+                if len(self.violator_trajectories[track_id]) > 200:
+                    self.violator_trajectories[track_id] = self.violator_trajectories[track_id][-200:]
             
             # Get real-time _show_all_boxes value via lambda function
             get_show_all_boxes = self.globals_ref.get('get_show_all_boxes')
@@ -620,7 +794,19 @@ class VideoThread(QThread):
                 
                 label_text = f"{vehicle_label} ID:{track_id}"
                 if show_as_violator:
-                    label_text += " [VIOLATOR]"
+                    # Build violation type labels in Vietnamese (no diacritics)
+                    violation_labels = []
+                    if is_tl_violator and has_passed_stopline:
+                        violation_labels.append("VUOT DEN DO")
+                    if is_lane_violator:
+                        violation_labels.append("SAI LAN")
+                    if is_direction_violator:
+                        violation_labels.append("SAI HUONG")
+                    
+                    if violation_labels:
+                        label_text += f" [{', '.join(violation_labels)}]"
+                    else:
+                        label_text += " [VI PHAM]"
                 
                 # === Show OCR text and draw plate for YOLO Direct mode ===
                 if not self.use_plate_relative_tracking:
@@ -683,6 +869,33 @@ class VideoThread(QThread):
                 
                 cv2.putText(frame, label_text, (x1, y1-5),
                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, box_color, 2)
+        
+        # Clean up trajectories for vehicles no longer detected
+        current_vehicle_ids = set(veh["track_id"] for veh in vehicles if veh["track_id"] != -1)
+        for track_id in list(self.violator_trajectories.keys()):
+            if track_id not in current_vehicle_ids:
+                del self.violator_trajectories[track_id]
+        
+        # Draw violator trajectories if enabled
+        if self.show_violator_trajectories:
+            for track_id, trajectory in self.violator_trajectories.items():
+                if len(trajectory) >= 2:
+                    # Draw trajectory as polyline
+                    points = np.array(trajectory, dtype=np.int32)
+                    # Use gradient color from yellow to red based on position
+                    for i in range(1, len(points)):
+                        # Color gradient: older points more yellow, newer points more red
+                        ratio = i / len(points)
+                        color = (0, int(255 * (1 - ratio)), 255)  # From yellow (0,255,255) to red (0,0,255)
+                        cv2.line(frame, tuple(points[i-1]), tuple(points[i]), color, 2)
+                    
+                    # Draw starting point (circle)
+                    if len(trajectory) > 0:
+                        cv2.circle(frame, trajectory[0], 5, (0, 255, 255), -1)  # Yellow start
+                    
+                    # Draw current position (larger circle)
+                    if len(trajectory) > 0:
+                        cv2.circle(frame, trajectory[-1], 8, (0, 0, 255), -1)  # Red current
         
         # Draw statistics panel
         frame = self._draw_statistics_panel(frame)

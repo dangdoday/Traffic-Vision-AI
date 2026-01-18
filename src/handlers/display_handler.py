@@ -2,6 +2,7 @@
 Display Handler Mixin
 Contains methods for rendering overlays, toggles, and display management
 """
+import sys
 import cv2
 import numpy as np
 import math
@@ -12,7 +13,11 @@ class DisplayHandlerMixin:
     """Mixin class for display and rendering in MainWindow"""
     
     def _get_globals(self):
-        """Get globals from integrated_main - lazy import"""
+        """Get globals from the main module - handles both __main__ and integrated_main cases"""
+        if '__main__' in sys.modules:
+            main_module = sys.modules['__main__']
+            if hasattr(main_module, 'TL_ROIS') and hasattr(main_module, 'LANE_CONFIGS'):
+                return main_module
         import integrated_main
         return integrated_main
     
@@ -198,9 +203,17 @@ class DisplayHandlerMixin:
         # Draw editing overlay if in edit mode
         if self.roi_editor.is_editing():
             roi_idx = self.roi_editor.editing_roi_index
-            if roi_idx < len(main.DIRECTION_ROIS):
-                points = main.DIRECTION_ROIS[roi_idx]['points']
-                self.roi_editor.draw_editing_overlay(frame, points)
+            
+            if self.roi_editor.is_editing_lane():
+                # Editing a lane - get lane points
+                if roi_idx < len(main.LANE_CONFIGS):
+                    points = main.LANE_CONFIGS[roi_idx]['poly']
+                    self.roi_editor.draw_editing_overlay(frame, points)
+            elif self.roi_editor.is_editing_direction():
+                # Editing a direction ROI - get ROI points
+                if roi_idx < len(main.DIRECTION_ROIS):
+                    points = main.DIRECTION_ROIS[roi_idx]['points']
+                    self.roi_editor.draw_editing_overlay(frame, points)
         
         return frame
     
@@ -263,3 +276,23 @@ class DisplayHandlerMixin:
             self.btn_toggle_bb.setText("Show Only Violators: ON")
             self.statusBar().showMessage("Status: Showing only violators")
             print("🚨 Showing ONLY violator bounding boxes")
+    
+    def toggle_trajectory_display(self):
+        """Toggle violator trajectory display"""
+        if not hasattr(self, 'thread') or self.thread is None:
+            print("⚠️ No video thread active")
+            return
+        
+        # Toggle the flag in video thread
+        self.thread.show_violator_trajectories = self.btn_toggle_trajectory.isChecked()
+        
+        if self.thread.show_violator_trajectories:
+            self.btn_toggle_trajectory.setText("Violator Trajectory: ON")
+            self.statusBar().showMessage("Status: Showing violator trajectories")
+            print("📍 Violator trajectories: ON")
+        else:
+            self.btn_toggle_trajectory.setText("Violator Trajectory: OFF")
+            self.statusBar().showMessage("Status: Hiding violator trajectories")
+            print("📍 Violator trajectories: OFF")
+            # Clear existing trajectories when disabled
+            self.thread.violator_trajectories.clear()

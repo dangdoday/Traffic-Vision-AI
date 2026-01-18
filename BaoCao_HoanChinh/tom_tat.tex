@@ -1,0 +1,36 @@
+\chapter*{Tóm tắt}
+\addcontentsline{toc}{chapter}{Tóm tắt}
+
+\section*{Tổng quan}
+Đề tài \textbf{``Hệ thống giám sát giao thông thông minh và nhận diện biển số xe Việt Nam''} trình bày việc xây dựng một hệ thống hoàn chỉnh ứng dụng các kỹ thuật Thị giác máy tính và Học sâu vào bài toán giám sát giao thông thực tế tại Việt Nam.
+
+\section*{Mục tiêu nghiên cứu}
+Hệ thống được phát triển với các mục tiêu chính:
+\begin{enumerate}
+    \item \textbf{Phát hiện và phân loại phương tiện:} Nhận diện 5 loại phương tiện phổ biến trong giao thông Việt Nam (xe máy, ô tô, xe buýt, xe tải, xe đạp) sử dụng mô hình YOLOv8.
+    \item \textbf{Theo dõi đa đối tượng:} Ứng dụng thuật toán ByteTrack để theo dõi quỹ đạo di chuyển và đếm lưu lượng xe theo từng làn đường.
+    \item \textbf{Phát hiện vi phạm giao thông:} Tự động phát hiện các hành vi vượt đèn đỏ và đi sai làn đường thông qua phân tích hướng di chuyển và logic hình học.
+    \item \textbf{Nhận diện biển số xe:} Xây dựng pipeline hoàn chỉnh phát hiện và đọc biển số xe Việt Nam sử dụng YOLOv8 kết hợp PaddleOCR.
+\end{enumerate}
+
+\section*{Phương pháp}
+\begin{itemize}
+    \item \textbf{Phát hiện đối tượng:} YOLOv8n (Anchor-free, C2f Module) được huấn luyện trên dữ liệu giao thông Việt Nam tự thu thập với hơn 16.000 ảnh và 65.000 bounding box.
+    \item \textbf{Theo dõi:} ByteTrack với cơ chế liên kết hai giai đoạn (high-score và low-score matching) kết hợp Bộ lọc Kalman.
+    \item \textbf{Xác định hướng:} Direction Fusion kết hợp Trajectory Analysis (Reference Vector) và ROI-based Direction.
+    \item \textbf{Nhận dạng biển số:} CLAHE + Sharpening tiền xử lý, PaddleOCR (CRNN + CTC) cho OCR, cùng cơ chế Voting \& Lock để ổn định kết quả.
+\end{itemize}
+
+\section*{Kết quả chính}
+\begin{itemize}
+    \item \textbf{Phát hiện phương tiện:} mAP@50 đạt \textbf{86.1\%}, trong đó lớp ``Ô tô'' đạt 92.2\%.
+    \item \textbf{Phát hiện biển số:} mAP@50 đạt \textbf{99.5\%}, Precision = 99.97\%.
+    \item \textbf{Tốc độ xử lý:} 25--30 FPS với pipeline giám sát, 5--10 FPS với full pipeline bao gồm OCR.
+    \item \textbf{Phát hiện vi phạm:} Hệ thống hoạt động ổn định với logic phát hiện vượt đèn đỏ và sai làn đường.
+\end{itemize}
+
+\section*{Ý nghĩa}
+Đề tài chứng minh khả năng ứng dụng các kỹ thuật AI tiên tiến vào giám sát giao thông Việt Nam với chi phí thấp, tốc độ thời gian thực, mở ra tiềm năng triển khai rộng rãi trong quản lý đô thị thông minh.
+
+\vspace{0.5cm}
+\textbf{Từ khóa:} YOLOv8, ByteTrack, Phát hiện vi phạm giao thông, Nhận diện biển số, PaddleOCR, Thị giác máy tính

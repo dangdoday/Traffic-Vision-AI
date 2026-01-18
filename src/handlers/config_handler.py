@@ -3,6 +3,7 @@ Configuration Handler Mixin
 Contains methods for saving and loading configurations
 """
 import math
+import sys
 from PyQt5.QtWidgets import QMessageBox
 
 
@@ -10,13 +11,27 @@ class ConfigHandlerMixin:
     """Mixin class for configuration handling in MainWindow"""
     
     def _get_globals(self):
-        """Get globals from integrated_main - lazy import"""
+        """Get globals from the main module - handles both __main__ and integrated_main cases"""
+        # When integrated_main.py is run directly, it's loaded as __main__
+        # When imported by handlers, we need to get __main__ to access the same globals
+        if '__main__' in sys.modules:
+            main_module = sys.modules['__main__']
+            # Verify this is the correct module by checking for expected attributes
+            if hasattr(main_module, 'TL_ROIS') and hasattr(main_module, 'LANE_CONFIGS'):
+                return main_module
+        # Fallback to importing integrated_main (shouldn't happen in normal use)
         import integrated_main
         return integrated_main
     
     def save_configuration(self):
         """Save all ROI configurations to file"""
         main = self._get_globals()
+        
+        # Debug: Print what we're trying to save
+        print(f"🔍 [save_configuration] TL_ROIS id={id(main.TL_ROIS)}, len={len(main.TL_ROIS)}")
+        print(f"🔍 [save_configuration] DIRECTION_ROIS len={len(main.DIRECTION_ROIS)}")
+        print(f"🔍 [save_configuration] LANE_CONFIGS len={len(main.LANE_CONFIGS)}")
+        print(f"🔍 [save_configuration] STOP_LINE = {main.STOP_LINE}")
         
         if not self.video_path:
             QMessageBox.warning(self, "No Video", "Please load a video first before saving configuration.")
@@ -145,11 +160,14 @@ class ConfigHandlerMixin:
         # Load lanes
         main.LANE_CONFIGS.clear()
         for lane_data in config['lanes']:
+            # Support both 'allowed_types' and 'allowed_labels' keys
+            allowed = lane_data.get('allowed_types', lane_data.get('allowed_labels', []))
             main.LANE_CONFIGS.append({
                 'poly': lane_data['points'],
                 'points': lane_data['points'],
                 'label': lane_data.get('label', 'Unnamed Lane'),
-                'allowed_types': lane_data.get('allowed_types', [])
+                'allowed_types': allowed,
+                'allowed_labels': allowed  # Also set allowed_labels for compatibility
             })
         
         # Update lane list widget
@@ -163,6 +181,9 @@ class ConfigHandlerMixin:
         # Load traffic lights
         main.TL_ROIS.clear()
         main.TL_ROIS.extend(config['traffic_lights'])
+        print(f"🚦 [config_handler] Loaded TL_ROIS: count={len(main.TL_ROIS)}, id={id(main.TL_ROIS)}")
+        for i, roi in enumerate(main.TL_ROIS):
+            print(f"   TL {i}: type={roi[4]}, color={roi[5]}")
         
         # ⚠️ CRITICAL: Enable TL tracking and update colors from current frame
         if len(main.TL_ROIS) > 0:
@@ -267,8 +288,8 @@ class ConfigHandlerMixin:
                         if self.current_model_config:
                             self.current_model_config['default_conf'] = conf_threshold
                     
-                    # Update thread config
-                    if hasattr(self, 'thread') and self.thread.model_config:
+                    # Update thread config (check model_config is not None)
+                    if hasattr(self, 'thread') and self.thread is not None and self.thread.model_config is not None:
                         if imgsz is not None:
                             self.thread.model_config['default_imgsz'] = imgsz
                         if conf_threshold is not None:

@@ -1,0 +1,24 @@
+{
+  "video_name": "V_20251120_155111_ES6.mp4",
+  "video_path": "D:/Download/V_20251120_155111_ES6.mp4",
+  "lanes": [],
+  "stopline": {
+    "p1": [
+      294,
+      540
+    ],
+    "p2": [
+      1371,
+      542
+    ]
+  },
+  "traffic_lights": [],
+  "direction_zones": [],
+  "reference_vector": null,
+  "model": {
+    "type": "YOLOv8",
+    "weight": "416_vehicle_plate.pt",
+    "imgsz": 416,
+    "conf_threshold": 0.3
+  }
+}

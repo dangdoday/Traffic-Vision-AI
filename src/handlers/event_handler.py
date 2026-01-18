@@ -2,6 +2,7 @@
 Event Handler Mixin
 Contains mouse event handlers and keyboard shortcuts for MainWindow
 """
+import sys
 import cv2
 import numpy as np
 from PyQt5.QtWidgets import QMenu, QAction, QInputDialog
@@ -11,7 +12,11 @@ class EventHandlerMixin:
     """Mixin class for handling mouse and keyboard events in MainWindow"""
     
     def _get_globals(self):
-        """Get globals from integrated_main - lazy import"""
+        """Get globals from the main module - handles both __main__ and integrated_main cases"""
+        if '__main__' in sys.modules:
+            main_module = sys.modules['__main__']
+            if hasattr(main_module, 'TL_ROIS') and hasattr(main_module, 'LANE_CONFIGS'):
+                return main_module
         import integrated_main
         return integrated_main
     
@@ -65,29 +70,29 @@ class EventHandlerMixin:
         edit_menu.addAction(action_edit_lane)
         
         # Edit direction ROI
-        action_edit_direction = QAction("Edit Selected Direction ROI", self)
+        action_edit_direction = QAction("Edit Direction ROI", self)
         action_edit_direction.triggered.connect(self.start_edit_direction_roi)
-        action_edit_direction.setEnabled(self.direction_roi_list.currentRow() >= 0)
+        action_edit_direction.setEnabled(len(main.DIRECTION_ROIS) > 0)  # Has dialog to select
         edit_menu.addAction(action_edit_direction)
         
         # Smooth ROI
         action_smooth = QAction("Smooth ROI (reduce points)", self)
         action_smooth.triggered.connect(self.smooth_current_roi)
-        action_smooth.setEnabled(self.roi_editor.is_editing())
+        action_smooth.setEnabled(self.roi_editor.is_editing())  # Only during edit
         edit_menu.addAction(action_smooth)
         
         # Change directions
         action_change_dir = QAction("Change ROI Directions", self)
         action_change_dir.triggered.connect(self.change_roi_directions)
-        action_change_dir.setEnabled(self.roi_editor.is_editing())
+        action_change_dir.setEnabled(len(main.DIRECTION_ROIS) > 0)  # Has dialog to select
         edit_menu.addAction(action_change_dir)
         
         edit_menu.addSeparator()
         
         # Finish editing
-        action_finish_edit = QAction("Finish Editing ROI", self)
-        action_finish_edit.triggered.connect(self.finish_edit_roi)
-        action_finish_edit.setEnabled(self.roi_editor.is_editing())
+        action_finish_edit = QAction("Finish Editing", self)
+        action_finish_edit.triggered.connect(self._finish_current_editing)
+        action_finish_edit.setEnabled(self.roi_editor.is_editing())  # Only during edit
         edit_menu.addAction(action_finish_edit)
         
         menu.addSeparator()
@@ -95,9 +100,9 @@ class EventHandlerMixin:
         # === DELETE Section ===
         delete_menu = menu.addMenu("🗑️ Delete")
         
-        action_delete_lane = QAction("Delete Selected Lane", self)
+        action_delete_lane = QAction("Delete Lane", self)
         action_delete_lane.triggered.connect(self.delete_lane)
-        action_delete_lane.setEnabled(self.lane_list.currentRow() >= 0)
+        action_delete_lane.setEnabled(len(main.LANE_CONFIGS) > 0)  # Has dialog to select
         delete_menu.addAction(action_delete_lane)
         
         action_delete_stopline = QAction("Delete Stop Line", self)
@@ -107,12 +112,12 @@ class EventHandlerMixin:
         
         action_delete_tl = QAction("Delete Traffic Light", self)
         action_delete_tl.triggered.connect(self.delete_tl)
-        action_delete_tl.setEnabled(len(main.TL_ROIS) > 0)
+        action_delete_tl.setEnabled(len(main.TL_ROIS) > 0)  # Has dialog to select
         delete_menu.addAction(action_delete_tl)
         
         action_delete_direction = QAction("Delete Direction ROI", self)
         action_delete_direction.triggered.connect(self.delete_direction_roi)
-        action_delete_direction.setEnabled(self.direction_roi_list.currentRow() >= 0)
+        action_delete_direction.setEnabled(len(main.DIRECTION_ROIS) > 0)  # Has dialog to select
         delete_menu.addAction(action_delete_direction)
         
         menu.addSeparator()
@@ -205,13 +210,21 @@ class EventHandlerMixin:
                     self.dragging_lane_point_idx = None
                 return
             
-            # Handle ROI editing mode
+            # Handle ROI editing mode (both lanes and direction ROIs)
             if self.roi_editor.is_editing():
                 roi_idx = self.roi_editor.editing_roi_index
-                if roi_idx < len(main.DIRECTION_ROIS):
-                    points = main.DIRECTION_ROIS[roi_idx]['points']
-                    button_name = 'right' if event.button() == Qt.RightButton else 'left'
-                    self.roi_editor.handle_mouse_press(frame_x, frame_y, button_name, points)
+                button_name = 'right' if event.button() == Qt.RightButton else 'left'
+                
+                if self.roi_editor.is_editing_lane():
+                    # Editing a lane
+                    if roi_idx < len(main.LANE_CONFIGS):
+                        points = main.LANE_CONFIGS[roi_idx]['poly']
+                        self.roi_editor.handle_mouse_press(frame_x, frame_y, button_name, points)
+                elif self.roi_editor.is_editing_direction():
+                    # Editing a direction ROI
+                    if roi_idx < len(main.DIRECTION_ROIS):
+                        points = main.DIRECTION_ROIS[roi_idx]['points']
+                        self.roi_editor.handle_mouse_press(frame_x, frame_y, button_name, points)
                 return
             
             if main._drawing_mode == 'lane':
@@ -324,14 +337,19 @@ class EventHandlerMixin:
                     self.update_lists()
                 return
             
-            # Handle ROI editing
+            # Handle ROI editing (both lanes and direction ROIs)
             if not self.roi_editor.is_editing():
                 return
             
             roi_idx = self.roi_editor.editing_roi_index
-            if roi_idx < len(main.DIRECTION_ROIS):
-                points = main.DIRECTION_ROIS[roi_idx]['points']
-                self.roi_editor.handle_mouse_move(frame_x, frame_y, points)
+            if self.roi_editor.is_editing_lane():
+                if roi_idx < len(main.LANE_CONFIGS):
+                    points = main.LANE_CONFIGS[roi_idx]['poly']
+                    self.roi_editor.handle_mouse_move(frame_x, frame_y, points)
+            elif self.roi_editor.is_editing_direction():
+                if roi_idx < len(main.DIRECTION_ROIS):
+                    points = main.DIRECTION_ROIS[roi_idx]['points']
+                    self.roi_editor.handle_mouse_move(frame_x, frame_y, points)
     
     def video_mouse_release(self, event):
         """Stop dragging point"""
@@ -397,15 +415,21 @@ class EventHandlerMixin:
                     print(f"➕ Added new point at position {insert_idx+1}")
                 return
             
-            # Handle ROI editing
+            # Handle ROI editing (both lanes and direction ROIs)
             if not self.roi_editor.is_editing():
                 return
             
             roi_idx = self.roi_editor.editing_roi_index
-            if roi_idx < len(main.DIRECTION_ROIS):
-                points = main.DIRECTION_ROIS[roi_idx]['points']
-                if self.roi_editor.handle_double_click(frame_x, frame_y, points):
-                    self.update_direction_roi_list()
+            if self.roi_editor.is_editing_lane():
+                if roi_idx < len(main.LANE_CONFIGS):
+                    points = main.LANE_CONFIGS[roi_idx]['poly']
+                    if self.roi_editor.handle_double_click(frame_x, frame_y, points):
+                        self.update_lists()
+            elif self.roi_editor.is_editing_direction():
+                if roi_idx < len(main.DIRECTION_ROIS):
+                    points = main.DIRECTION_ROIS[roi_idx]['points']
+                    if self.roi_editor.handle_double_click(frame_x, frame_y, points):
+                        self.update_direction_roi_list()
     
     def _point_to_segment_dist(self, px, py, x1, y1, x2, y2):
         """Calculate distance from point to line segment"""
@@ -426,13 +450,25 @@ class EventHandlerMixin:
         
         # Enter/Return key to finish drawing or editing
         if event.key() in (Qt.Key_Return, Qt.Key_Enter):
-            # Finish lane editing
-            if hasattr(self, 'editing_lane_idx') and self.editing_lane_idx is not None:
+            # Debug
+            print(f"🔍 keyPressEvent Enter: is_editing={self.roi_editor.is_editing()}, "
+                  f"is_editing_lane={self.roi_editor.is_editing_lane()}, "
+                  f"is_editing_direction={self.roi_editor.is_editing_direction()}, "
+                  f"editing_type={self.roi_editor.editing_type}")
+            
+            # Finish lane editing via roi_editor
+            if hasattr(self, 'roi_editor') and self.roi_editor.is_editing_lane():
+                print("📌 KeyPress: Calling finish_edit_lane()")
                 self.finish_edit_lane()
                 return
-            # Finish ROI editing
-            if self.roi_editor.is_editing():
+            # Finish direction ROI editing via roi_editor
+            if hasattr(self, 'roi_editor') and self.roi_editor.is_editing_direction():
+                print("📌 KeyPress: Calling finish_edit_roi()")
                 self.finish_edit_roi()
+                return
+            # Legacy: Finish lane editing
+            if hasattr(self, 'editing_lane_idx') and self.editing_lane_idx is not None:
+                self.finish_edit_lane()
                 return
             if main._drawing_mode == 'lane':
                 # Finish lane drawing

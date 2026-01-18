@@ -1,0 +1,103 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\@writefile{toc}{\contentsline {chapter}{\numberline {2}Cơ sở lý thuyết: Phát hiện và theo dõi đối tượng}{5}{chapter.2}\protected@file@percent }
+\@writefile{lof}{\addvspace {10\p@ }}
+\@writefile{lot}{\addvspace {10\p@ }}
+\@writefile{loa}{\addvspace {10\p@ }}
+\newlabel{ch:ly_thuyet_detection}{{2}{5}{Cơ sở lý thuyết: Phát hiện và theo dõi đối tượng}{chapter.2}{}}
+\@writefile{toc}{\contentsline {section}{\numberline {2.1}Tổng quan về bài toán Phát hiện đối tượng}{5}{section.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1.1}Giới thiệu chung}{5}{subsection.2.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1.2}Định nghĩa toán học}{5}{subsection.2.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1.3}Thách thức của bài toán}{6}{subsection.2.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2.2}Cơ sở lý thuyết về mô hình YOLO}{6}{section.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2.1}Hợp nhất bài toán thành một mạng duy nhất}{6}{subsection.2.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2.2}Cơ chế chia lưới và Biểu diễn đầu ra}{6}{subsection.2.2.2}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.1}{\ignorespaces Cơ chế chia lưới và biểu diễn đầu ra của YOLO}}{7}{figure.caption.7}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{fig:grid_yolo}{{2.1}{7}{Cơ chế chia lưới và biểu diễn đầu ra của YOLO}{figure.caption.7}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2.3}Kiến trúc mạng tổng quát}{7}{subsection.2.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2.4}Sự tiến hóa và Lựa chọn YOLOv8}{8}{subsection.2.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2.3}Mô hình YOLOv8 chi tiết}{8}{section.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3.1}Cơ chế Anchor-free}{8}{subsection.2.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3.2}Các thành phần kiến trúc đặc trưng}{9}{subsection.2.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Module C2f (Cross Stage Partial with 2 flow)}{9}{subsubsection*.8}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Module SPPF (Spatial Pyramid Pooling Fast)}{9}{subsubsection*.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Chiến lược gán nhãn Task Aligned Assigner}{9}{subsubsection*.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3.3}Hàm mất mát (Loss Function)}{10}{subsection.2.3.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Mất mát định vị (Box Loss)}{10}{subsubsection*.11}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Mất mát phân loại (Classification Loss)}{10}{subsubsection*.12}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2.4}Các độ đo đánh giá (Evaluation Metrics)}{11}{section.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.1}Precision và Recall}{11}{subsection.2.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.2}Average Precision (AP)}{11}{subsection.2.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4.3}Mean Average Precision (mAP)}{11}{subsection.2.4.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2.5}Theo dõi đa đối tượng (Multi-Object Tracking)}{11}{section.2.5}\protected@file@percent }
+\newlabel{sec:tracking_theory}{{2.5}{11}{Theo dõi đa đối tượng (Multi-Object Tracking)}{section.2.5}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.5.1}Bộ lọc Kalman (Kalman Filter)}{11}{subsection.2.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Không gian trạng thái (State Space)}{12}{subsubsection*.13}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Quá trình Dự đoán (Prediction)}{12}{subsubsection*.14}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Quá trình Cập nhật (Update)}{12}{subsubsection*.15}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.2}{\ignorespaces Chu trình hoạt động của Bộ lọc Kalman}}{13}{figure.caption.16}\protected@file@percent }
+\newlabel{fig:kalman_cycle}{{2.2}{13}{Chu trình hoạt động của Bộ lọc Kalman}{figure.caption.16}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.5.2}Liên kết dữ liệu (Data Association)}{13}{subsection.2.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.5.3}Thuật toán ByteTrack}{14}{subsection.2.5.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Phân loại Detection}{14}{subsubsection*.17}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Quy trình liên kết hai giai đoạn}{14}{subsubsection*.18}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.3}{\ignorespaces Minh họa quy trình liên kết hai giai đoạn của ByteTrack}}{15}{figure.caption.19}\protected@file@percent }
+\newlabel{fig:maching-bytrack}{{2.3}{15}{Minh họa quy trình liên kết hai giai đoạn của ByteTrack}{figure.caption.19}{}}
+\@writefile{toc}{\contentsline {subsubsection}{Quản lý vòng đời Track}{16}{subsubsection*.20}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Ưu điểm đối với bài toán giao thông Việt Nam}{16}{subsubsection*.21}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2.6}Xử lý ảnh và Hình học tính toán}{16}{section.2.6}\protected@file@percent }
+\newlabel{sec:cv_geometry}{{2.6}{16}{Xử lý ảnh và Hình học tính toán}{section.2.6}{}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.6.1}Không gian màu HSV trong nhận diện tín hiệu đèn}{16}{subsection.2.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.6.2}Hình học tính toán trong phát hiện vi phạm}{17}{subsection.2.6.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Kiểm tra xe trong làn đường}{17}{subsubsection*.22}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Khoảng cách tới vạch dừng và sự kiện cắt qua}{17}{subsubsection*.23}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{Ước lượng hướng di chuyển dựa trên góc tham chiếu}{17}{subsubsection*.24}\protected@file@percent }
+\@writefile{lof}{\contentsline {figure}{\numberline {2.4}{\ignorespaces So sánh góc chuyển động $\vec  v$ với góc tham chiếu $\vec  r$ (ngưỡng $50^\circ $). Vùng màu xanh lá: đi thẳng, vùng ngoài: rẽ trái/phải.}}{18}{figure.caption.25}\protected@file@percent }
+\newlabel{fig:direction_reference}{{2.4}{18}{So sánh góc chuyển động $\vec v$ với góc tham chiếu $\vec r$ (ngưỡng $50^\circ $). Vùng màu xanh lá: đi thẳng, vùng ngoài: rẽ trái/phải}{figure.caption.25}{}}
+\@setckpt{chuong2_ly_thuyet_phat_hien}{
+\setcounter{page}{19}
+\setcounter{equation}{24}
+\setcounter{enumi}{2}
+\setcounter{enumii}{0}
+\setcounter{enumiii}{0}
+\setcounter{enumiv}{0}
+\setcounter{footnote}{0}
+\setcounter{mpfootnote}{0}
+\setcounter{part}{0}
+\setcounter{chapter}{2}
+\setcounter{section}{6}
+\setcounter{subsection}{2}
+\setcounter{subsubsection}{0}
+\setcounter{paragraph}{0}
+\setcounter{subparagraph}{0}
+\setcounter{figure}{4}
+\setcounter{table}{0}
+\setcounter{parentequation}{0}
+\setcounter{caption@flags}{2}
+\setcounter{continuedfloat}{0}
+\setcounter{subfigure}{0}
+\setcounter{subtable}{0}
+\setcounter{r@tfl@t}{0}
+\setcounter{AlgoLine}{0}
+\setcounter{algocfline}{0}
+\setcounter{algocfproc}{0}
+\setcounter{algocf}{0}
+\setcounter{ALG@line}{0}
+\setcounter{ALG@rem}{0}
+\setcounter{ALG@nested}{0}
+\setcounter{ALG@Lnr}{2}
+\setcounter{ALG@blocknr}{10}
+\setcounter{ALG@storecount}{0}
+\setcounter{ALG@tmpcounter}{0}
+\setcounter{float@type}{4}
+\setcounter{NAT@ctr}{0}
+\setcounter{definition}{0}
+\setcounter{theorem}{0}
+\setcounter{section@level}{0}
+\setcounter{Item}{17}
+\setcounter{Hfootnote}{0}
+\setcounter{bookmark@seq@number}{42}
+\setcounter{linenumber}{1}
+\setcounter{LN@truepage}{30}
+}

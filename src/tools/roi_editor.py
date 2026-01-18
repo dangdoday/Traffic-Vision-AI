@@ -14,29 +14,37 @@ import cv2
 
 
 class ROIEditor:
-    """Handle ROI editing operations"""
+    """Handle ROI editing operations for both lanes and direction ROIs"""
     
     def __init__(self):
         self.editing_roi_index = None  # Index of ROI being edited
+        self.editing_type = None  # 'lane' or 'direction'
         self.dragging_point_index = None  # Index of point being dragged
         self.hover_point_index = None  # Index of point being hovered
         self.hover_edge_indices = None  # (p1_idx, p2_idx) of edge being hovered
         self.point_radius = 8  # Click detection radius for points
         self.edge_threshold = 10  # Click detection threshold for edges
         
-    def start_editing(self, roi_index):
-        """Start editing a specific ROI"""
+    def start_editing(self, roi_index, roi_type='direction'):
+        """Start editing a specific ROI
+        
+        Args:
+            roi_index: Index of the ROI to edit
+            roi_type: 'lane' or 'direction'
+        """
         self.editing_roi_index = roi_index
+        self.editing_type = roi_type
         self.dragging_point_index = None
         self.hover_point_index = None
         self.hover_edge_indices = None
-        print(f"✏️ Started editing ROI {roi_index}")
+        print(f"✏️ Started editing {roi_type} ROI {roi_index}")
         
     def finish_editing(self):
         """Finish editing current ROI"""
         if self.editing_roi_index is not None:
-            print(f"✅ Finished editing ROI {self.editing_roi_index}")
+            print(f"✅ Finished editing {self.editing_type} ROI {self.editing_roi_index}")
         self.editing_roi_index = None
+        self.editing_type = None
         self.dragging_point_index = None
         self.hover_point_index = None
         self.hover_edge_indices = None
@@ -44,6 +52,14 @@ class ROIEditor:
     def is_editing(self):
         """Check if currently editing an ROI"""
         return self.editing_roi_index is not None
+    
+    def is_editing_lane(self):
+        """Check if currently editing a lane"""
+        return self.editing_roi_index is not None and self.editing_type == 'lane'
+    
+    def is_editing_direction(self):
+        """Check if currently editing a direction ROI"""
+        return self.editing_roi_index is not None and self.editing_type == 'direction'
     
     def handle_mouse_press(self, x, y, button, points):
         """
