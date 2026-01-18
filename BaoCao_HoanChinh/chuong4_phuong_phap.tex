@@ -7,7 +7,7 @@ Chương này trình bày chi tiết phương pháp triển khai toàn bộ hệ
 
 Hệ thống được thiết kế theo mô hình xử lý đa luồng sử dụng PyQt5 \texttt{QThread} để đảm bảo khả năng xử lý thời gian thực. Quy trình xử lý chính được chia thành các module chuyên biệt tương tác với nhau thông qua Global State quản lý bởi \texttt{VideoThread}.
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
 \centering
 \begin{tikzpicture}[node distance=1.5cm]
     % Nodes
@@ -74,7 +74,7 @@ Dữ liệu video và hình ảnh được thu thập từ hai nguồn chính:
 \subsubsection{Gán nhãn dữ liệu}
 Sau khi trích xuất video thành các khung hình ảnh, nhóm thực hiện gán nhãn thủ công sử dụng công cụ \textbf{CVAT} và \textbf{Roboflow}.
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=0.7\linewidth]{../BÁO_CÁO_ADVC/Figures/labels.jpg}
     \caption{Phân bố số lượng nhãn và vị trí không gian của các đối tượng}
@@ -287,7 +287,7 @@ Chúng tôi đề xuất hai phương pháp tiếp cận để giải quyết b�
 \subsubsection{Tổng quan Pipeline}
 Hệ thống nhận diện biển số được xây dựng theo kiến trúc Two-Stage với các bước:
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \begin{tikzpicture}[
         node distance=0.8cm,
@@ -351,7 +351,7 @@ Bộ dữ liệu VNLP bao gồm các ảnh biển số xe Việt Nam được g�
 
 \subsubsection{Tổng quan Pipeline}
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \begin{tikzpicture}[
         node distance=0.8cm,
@@ -553,3 +553,4 @@ Hệ thống hoàn chỉnh được xây dựng với các thành phần chính:
 \end{enumerate}
 
 Toàn bộ pipeline được tích hợp trong ứng dụng PyQt5 với giao diện đồ họa thân thiện, cho phép người dùng cấu hình ROI, vạch dừng, làn đường một cách trực quan.
+

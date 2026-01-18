@@ -3,7 +3,6 @@
 %% ============= PACKAGES =============
 % Language and font encodings
 \usepackage[utf8]{inputenc}
-\usepackage[T1]{fontenc}
 \usepackage[vietnamese]{babel}
 \usepackage[utf8]{vietnam}
 
@@ -29,6 +28,12 @@
 
 % Miscellaneous
 \usepackage{float}
+\usepackage{enumitem}  % For list spacing control
+
+% List spacing configuration
+\setlist{nosep, itemsep=2pt, parsep=2pt, topsep=4pt}
+\setlist[itemize]{itemsep=2pt, parsep=2pt, topsep=4pt}
+\setlist[enumerate]{itemsep=2pt, parsep=2pt, topsep=4pt}
 \usepackage{indentfirst}
 \usepackage{textcomp}
 \usepackage{acronym}

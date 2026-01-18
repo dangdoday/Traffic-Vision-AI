@@ -10,12 +10,12 @@
 \contentsline {section}{\numberline {1.2}Mục tiêu của đề tài}{2}{section.1.2}%
 \contentsline {subsection}{\numberline {1.2.1}Module phát hiện và theo dõi phương tiện}{2}{subsection.1.2.1}%
 \contentsline {subsection}{\numberline {1.2.2}Module phát hiện vi phạm}{2}{subsection.1.2.2}%
-\contentsline {subsection}{\numberline {1.2.3}Module nhận diện biển số xe}{3}{subsection.1.2.3}%
+\contentsline {subsection}{\numberline {1.2.3}Module nhận diện biển số xe}{2}{subsection.1.2.3}%
 \contentsline {section}{\numberline {1.3}Phạm vi nghiên cứu}{3}{section.1.3}%
 \contentsline {subsection}{\numberline {1.3.1}Dữ liệu}{3}{subsection.1.3.1}%
 \contentsline {subsection}{\numberline {1.3.2}Công nghệ sử dụng}{3}{subsection.1.3.2}%
 \contentsline {subsection}{\numberline {1.3.3}Giới hạn}{3}{subsection.1.3.3}%
-\contentsline {section}{\numberline {1.4}Cấu trúc báo cáo}{4}{section.1.4}%
+\contentsline {section}{\numberline {1.4}Cấu trúc báo cáo}{3}{section.1.4}%
 \contentsline {chapter}{\numberline {2}Cơ sở lý thuyết: Phát hiện và theo dõi đối tượng}{5}{chapter.2}%
 \contentsline {section}{\numberline {2.1}Tổng quan về bài toán Phát hiện đối tượng}{5}{section.2.1}%
 \contentsline {subsection}{\numberline {2.1.1}Giới thiệu chung}{5}{subsection.2.1.1}%
@@ -28,141 +28,158 @@
 \contentsline {subsection}{\numberline {2.2.4}Sự tiến hóa và Lựa chọn YOLOv8}{8}{subsection.2.2.4}%
 \contentsline {section}{\numberline {2.3}Mô hình YOLOv8 chi tiết}{8}{section.2.3}%
 \contentsline {subsection}{\numberline {2.3.1}Cơ chế Anchor-free}{8}{subsection.2.3.1}%
-\contentsline {subsection}{\numberline {2.3.2}Các thành phần kiến trúc đặc trưng}{8}{subsection.2.3.2}%
-\contentsline {subsubsection}{Module C2f (Cross Stage Partial with 2 flow)}{8}{subsubsection*.8}%
+\contentsline {subsection}{\numberline {2.3.2}Các thành phần kiến trúc đặc trưng}{9}{subsection.2.3.2}%
+\contentsline {subsubsection}{Module C2f (Cross Stage Partial with 2 flow)}{9}{subsubsection*.8}%
 \contentsline {subsubsection}{Module SPPF (Spatial Pyramid Pooling Fast)}{9}{subsubsection*.9}%
 \contentsline {subsubsection}{Chiến lược gán nhãn Task Aligned Assigner}{9}{subsubsection*.10}%
 \contentsline {subsection}{\numberline {2.3.3}Hàm mất mát (Loss Function)}{10}{subsection.2.3.3}%
 \contentsline {subsubsection}{Mất mát định vị (Box Loss)}{10}{subsubsection*.11}%
 \contentsline {subsubsection}{Mất mát phân loại (Classification Loss)}{10}{subsubsection*.12}%
 \contentsline {section}{\numberline {2.4}Các độ đo đánh giá (Evaluation Metrics)}{10}{section.2.4}%
-\contentsline {subsection}{\numberline {2.4.1}Precision và Recall}{11}{subsection.2.4.1}%
+\contentsline {subsection}{\numberline {2.4.1}Precision và Recall}{10}{subsection.2.4.1}%
 \contentsline {subsection}{\numberline {2.4.2}Average Precision (AP)}{11}{subsection.2.4.2}%
 \contentsline {subsection}{\numberline {2.4.3}Mean Average Precision (mAP)}{11}{subsection.2.4.3}%
 \contentsline {section}{\numberline {2.5}Theo dõi đa đối tượng (Multi-Object Tracking)}{11}{section.2.5}%
 \contentsline {subsection}{\numberline {2.5.1}Bộ lọc Kalman (Kalman Filter)}{11}{subsection.2.5.1}%
-\contentsline {subsubsection}{Không gian trạng thái (State Space)}{12}{subsubsection*.13}%
+\contentsline {subsubsection}{Không gian trạng thái (State Space)}{11}{subsubsection*.13}%
 \contentsline {subsubsection}{Quá trình Dự đoán (Prediction)}{12}{subsubsection*.14}%
 \contentsline {subsubsection}{Quá trình Cập nhật (Update)}{12}{subsubsection*.15}%
-\contentsline {subsection}{\numberline {2.5.2}Liên kết dữ liệu (Data Association)}{12}{subsection.2.5.2}%
-\contentsline {subsection}{\numberline {2.5.3}Thuật toán ByteTrack}{14}{subsection.2.5.3}%
+\contentsline {subsection}{\numberline {2.5.2}Liên kết dữ liệu (Data Association)}{13}{subsection.2.5.2}%
+\contentsline {subsection}{\numberline {2.5.3}Thuật toán ByteTrack}{13}{subsection.2.5.3}%
 \contentsline {subsubsection}{Phân loại Detection}{14}{subsubsection*.17}%
 \contentsline {subsubsection}{Quy trình liên kết hai giai đoạn}{14}{subsubsection*.18}%
-\contentsline {subsubsection}{Quản lý vòng đời Track}{15}{subsubsection*.20}%
-\contentsline {subsubsection}{Ưu điểm đối với bài toán giao thông Việt Nam}{15}{subsubsection*.21}%
+\contentsline {subsubsection}{Quản lý vòng đời Track}{16}{subsubsection*.20}%
+\contentsline {subsubsection}{Ưu điểm đối với bài toán giao thông Việt Nam}{16}{subsubsection*.21}%
 \contentsline {section}{\numberline {2.6}Xử lý ảnh và Hình học tính toán}{16}{section.2.6}%
 \contentsline {subsection}{\numberline {2.6.1}Không gian màu HSV trong nhận diện tín hiệu đèn}{16}{subsection.2.6.1}%
-\contentsline {subsection}{\numberline {2.6.2}Hình học tính toán trong phát hiện vi phạm}{16}{subsection.2.6.2}%
-\contentsline {subsubsection}{Kiểm tra xe trong làn đường}{16}{subsubsection*.22}%
-\contentsline {subsubsection}{Khoảng cách tới vạch dừng và sự kiện cắt qua}{16}{subsubsection*.23}%
+\contentsline {subsection}{\numberline {2.6.2}Hình học tính toán trong phát hiện vi phạm}{17}{subsection.2.6.2}%
+\contentsline {subsubsection}{Kiểm tra xe trong làn đường}{17}{subsubsection*.22}%
+\contentsline {subsubsection}{Khoảng cách tới vạch dừng và sự kiện cắt qua}{17}{subsubsection*.23}%
 \contentsline {subsubsection}{Ước lượng hướng di chuyển dựa trên góc tham chiếu}{17}{subsubsection*.24}%
-\contentsline {chapter}{\numberline {3}Cơ sở lý thuyết: Nhận diện biển số xe}{18}{chapter.3}%
-\contentsline {section}{\numberline {3.1}Tổng quan về ALPR}{18}{section.3.1}%
-\contentsline {section}{\numberline {3.2}Biển số xe Việt Nam}{18}{section.3.2}%
-\contentsline {subsection}{\numberline {3.2.1}Các định dạng biển số}{18}{subsection.3.2.1}%
-\contentsline {subsection}{\numberline {3.2.2}Thách thức nhận diện biển số Việt Nam}{19}{subsection.3.2.2}%
-\contentsline {section}{\numberline {3.3}PaddleOCR - Nhận dạng ký tự}{19}{section.3.3}%
-\contentsline {subsection}{\numberline {3.3.1}Giới thiệu PaddleOCR}{19}{subsection.3.3.1}%
-\contentsline {subsection}{\numberline {3.3.2}Kiến trúc CRNN}{19}{subsection.3.3.2}%
-\contentsline {subsection}{\numberline {3.3.3}CTC Loss}{19}{subsection.3.3.3}%
-\contentsline {section}{\numberline {3.4}Tiền xử lý ảnh biển số}{20}{section.3.4}%
-\contentsline {subsection}{\numberline {3.4.1}CLAHE - Cân bằng histogram thích ứng}{20}{subsection.3.4.1}%
-\contentsline {subsubsection}{Nguyên lý hoạt động}{20}{subsubsection*.29}%
-\contentsline {subsubsection}{Công thức toán học}{20}{subsubsection*.30}%
+\contentsline {chapter}{\numberline {3}Cơ sở lý thuyết: Nhận diện biển số xe}{19}{chapter.3}%
+\contentsline {section}{\numberline {3.1}Tổng quan về ALPR}{19}{section.3.1}%
+\contentsline {section}{\numberline {3.2}Biển số xe Việt Nam}{19}{section.3.2}%
+\contentsline {subsection}{\numberline {3.2.1}Các định dạng biển số}{19}{subsection.3.2.1}%
+\contentsline {subsection}{\numberline {3.2.2}Thách thức nhận diện biển số Việt Nam}{20}{subsection.3.2.2}%
+\contentsline {section}{\numberline {3.3}PaddleOCR - Nhận dạng ký tự}{20}{section.3.3}%
+\contentsline {subsection}{\numberline {3.3.1}Giới thiệu PaddleOCR}{20}{subsection.3.3.1}%
+\contentsline {subsection}{\numberline {3.3.2}Kiến trúc CRNN}{20}{subsection.3.3.2}%
+\contentsline {subsection}{\numberline {3.3.3}CTC Loss}{20}{subsection.3.3.3}%
+\contentsline {section}{\numberline {3.4}Tiền xử lý ảnh biển số}{21}{section.3.4}%
+\contentsline {subsection}{\numberline {3.4.1}CLAHE - Cân bằng histogram thích ứng}{21}{subsection.3.4.1}%
+\contentsline {subsubsection}{Nguyên lý hoạt động}{21}{subsubsection*.29}%
+\contentsline {subsubsection}{Công thức toán học}{21}{subsubsection*.30}%
 \contentsline {subsection}{\numberline {3.4.2}Sharpening - Làm sắc nét}{21}{subsection.3.4.2}%
-\contentsline {subsubsection}{Kernel Sharpening}{21}{subsubsection*.31}%
-\contentsline {subsubsection}{Nguyên lý}{21}{subsubsection*.32}%
-\contentsline {subsection}{\numberline {3.4.3}Quy trình tiền xử lý hoàn chỉnh}{21}{subsection.3.4.3}%
-\contentsline {section}{\numberline {3.5}So sánh các phiên bản YOLOv8}{21}{section.3.5}%
-\contentsline {section}{\numberline {3.6}Cơ chế Voting \& Lock}{22}{section.3.6}%
-\contentsline {subsection}{\numberline {3.6.1}Vấn đề với OCR đơn frame}{22}{subsection.3.6.1}%
-\contentsline {subsection}{\numberline {3.6.2}Giải pháp: Majority Voting}{22}{subsection.3.6.2}%
-\contentsline {subsection}{\numberline {3.6.3}Lock Mechanism}{22}{subsection.3.6.3}%
-\contentsline {section}{\numberline {3.7}Character Correction cho biển số Việt Nam}{22}{section.3.7}%
-\contentsline {subsection}{\numberline {3.7.1}Các lỗi phổ biến của OCR}{22}{subsection.3.7.1}%
-\contentsline {subsection}{\numberline {3.7.2}Logic hiệu chỉnh dựa trên định dạng}{23}{subsection.3.7.2}%
-\contentsline {chapter}{\numberline {4}Phương pháp thực hiện}{24}{chapter.4}%
-\contentsline {section}{\numberline {4.1}Kiến trúc tổng thể của hệ thống}{24}{section.4.1}%
-\contentsline {section}{\numberline {4.2}Chuẩn bị dữ liệu phát hiện phương tiện}{24}{section.4.2}%
-\contentsline {subsection}{\numberline {4.2.1}Quy trình thu thập dữ liệu}{24}{subsection.4.2.1}%
-\contentsline {subsubsection}{Thu thập dữ liệu thô}{24}{subsubsection*.37}%
-\contentsline {subsubsection}{Gán nhãn dữ liệu}{24}{subsubsection*.38}%
-\contentsline {subsection}{\numberline {4.2.2}Tiền xử lý dữ liệu}{25}{subsection.4.2.2}%
-\contentsline {section}{\numberline {4.3}Huấn luyện mô hình phát hiện phương tiện}{26}{section.4.3}%
-\contentsline {subsection}{\numberline {4.3.1}Cấu hình huấn luyện}{26}{subsection.4.3.1}%
-\contentsline {subsection}{\numberline {4.3.2}Quá trình tối ưu hóa}{26}{subsection.4.3.2}%
-\contentsline {section}{\numberline {4.4}Thuật toán xác định hướng di chuyển}{27}{section.4.4}%
-\contentsline {subsection}{\numberline {4.4.1}Phân tích quỹ đạo với Reference Vector (Trajectory-based)}{27}{subsection.4.4.1}%
-\contentsline {subsection}{\numberline {4.4.2}Xác định hướng dựa trên vùng quan tâm (ROI-based)}{27}{subsection.4.4.2}%
-\contentsline {subsection}{\numberline {4.4.3}Cơ chế kết hợp (Direction Fusion)}{28}{subsection.4.4.3}%
-\contentsline {section}{\numberline {4.5}Hệ thống phát hiện vi phạm}{28}{section.4.5}%
-\contentsline {subsection}{\numberline {4.5.1}Quản lý tín hiệu đèn giao thông}{28}{subsection.4.5.1}%
-\contentsline {subsection}{\numberline {4.5.2}Logic phát hiện vượt đèn đỏ}{28}{subsection.4.5.2}%
-\contentsline {subsection}{\numberline {4.5.3}Logic phát hiện sai làn đường}{29}{subsection.4.5.3}%
-\contentsline {subsection}{\numberline {4.5.4}Điểm chạm tham chiếu (Reference Point)}{29}{subsection.4.5.4}%
-\contentsline {subsection}{\numberline {4.5.5}Ngưỡng dung sai}{30}{subsection.4.5.5}%
-\contentsline {section}{\numberline {4.6}Pipeline nhận diện biển số xe (ALPR)}{30}{section.4.6}%
-\contentsline {subsection}{\numberline {4.6.1}Phương pháp 1: Mô hình phát hiện biển số chuyên biệt}{30}{subsection.4.6.1}%
-\contentsline {subsubsection}{Tổng quan Pipeline}{30}{subsubsection*.43}%
-\contentsline {subsubsection}{Plate Detection với YOLOv8}{30}{subsubsection*.45}%
-\contentsline {subsubsection}{Bộ dữ liệu VNLP}{30}{subsubsection*.47}%
-\contentsline {subsection}{\numberline {4.6.2}Phương pháp 2: Tích hợp phát hiện đa lớp (Semi-supervised)}{31}{subsection.4.6.2}%
-\contentsline {subsubsection}{Quy trình gán nhãn bán giám sát (Semi-supervised Labeling)}{31}{subsubsection*.48}%
-\contentsline {subsubsection}{Huấn luyện mô hình tích hợp}{32}{subsubsection*.49}%
-\contentsline {section}{\numberline {4.7}Tiền xử lý ảnh biển số}{32}{section.4.7}%
-\contentsline {subsection}{\numberline {4.7.1}Bước 1: CLAHE (Contrast Limited Adaptive Histogram Equalization)}{32}{subsection.4.7.1}%
-\contentsline {subsection}{\numberline {4.7.2}Bước 2: Sharpening}{32}{subsection.4.7.2}%
-\contentsline {section}{\numberline {4.8}OCR với PaddleOCR}{32}{section.4.8}%
-\contentsline {subsection}{\numberline {4.8.1}Cấu hình PaddleOCR}{32}{subsection.4.8.1}%
-\contentsline {subsection}{\numberline {4.8.2}Character Correction}{33}{subsection.4.8.2}%
-\contentsline {section}{\numberline {4.9}Voting \& Lock Mechanism}{33}{section.4.9}%
-\contentsline {subsection}{\numberline {4.9.1}Vấn đề}{33}{subsection.4.9.1}%
-\contentsline {subsection}{\numberline {4.9.2}Giải pháp: Voting}{33}{subsection.4.9.2}%
-\contentsline {subsection}{\numberline {4.9.3}Lock Mechanism}{33}{subsection.4.9.3}%
-\contentsline {section}{\numberline {4.10}Tích hợp với Vehicle Tracking}{34}{section.4.10}%
-\contentsline {section}{\numberline {4.11}Tổng kết phương pháp}{34}{section.4.11}%
-\contentsline {chapter}{\numberline {5}Thực nghiệm và Đánh giá kết quả}{35}{chapter.5}%
-\contentsline {section}{\numberline {5.1}Môi trường thực nghiệm}{35}{section.5.1}%
-\contentsline {subsection}{\numberline {5.1.1}Cấu hình phần cứng}{35}{subsection.5.1.1}%
-\contentsline {subsection}{\numberline {5.1.2}Cấu hình phần mềm}{35}{subsection.5.1.2}%
-\contentsline {section}{\numberline {5.2}Kết quả huấn luyện mô hình phát hiện phương tiện}{36}{section.5.2}%
-\contentsline {subsection}{\numberline {5.2.1}Thiết lập huấn luyện}{36}{subsection.5.2.1}%
-\contentsline {subsubsection}{Chiến lược tăng cường dữ liệu}{36}{subsubsection*.52}%
-\contentsline {subsection}{\numberline {5.2.2}Phân tích quá trình hội tụ}{36}{subsection.5.2.2}%
-\contentsline {subsection}{\numberline {5.2.3}Kết quả định lượng}{37}{subsection.5.2.3}%
-\contentsline {subsubsection}{Kết quả chi tiết theo từng lớp}{37}{subsubsection*.56}%
-\contentsline {subsection}{\numberline {5.2.4}Phân tích lỗi qua ma trận nhầm lẫn}{38}{subsection.5.2.4}%
-\contentsline {subsection}{\numberline {5.2.5}Đánh giá định tính}{38}{subsection.5.2.5}%
-\contentsline {section}{\numberline {5.3}Kết quả huấn luyện Plate Detection}{38}{section.5.3}%
-\contentsline {subsection}{\numberline {5.3.1}Quá trình huấn luyện}{38}{subsection.5.3.1}%
-\contentsline {subsection}{\numberline {5.3.2}Kết quả cuối cùng}{39}{subsection.5.3.2}%
-\contentsline {subsection}{\numberline {5.3.3}Ma trận nhầm lẫn Plate Detection}{40}{subsection.5.3.3}%
-\contentsline {section}{\numberline {5.4}Kết quả huấn luyện Mô hình tích hợp (6 lớp)}{40}{section.5.4}%
-\contentsline {subsection}{\numberline {5.4.1}Kết quả định lượng}{40}{subsection.5.4.1}%
-\contentsline {subsection}{\numberline {5.4.2}Đánh giá trực quan}{41}{subsection.5.4.2}%
-\contentsline {section}{\numberline {5.5}Kết quả Inference thực tế}{41}{section.5.5}%
-\contentsline {subsection}{\numberline {5.5.1}Môi trường thử nghiệm}{41}{subsection.5.5.1}%
-\contentsline {subsection}{\numberline {5.5.2}Đánh giá Phương pháp 1 (Two-Stage: Model chuyên biệt)}{41}{subsection.5.5.2}%
-\contentsline {subsubsection}{Hiệu năng Phương pháp 1}{41}{subsubsection*.66}%
-\contentsline {subsection}{\numberline {5.5.3}So sánh hiệu năng hai phương pháp}{41}{subsection.5.5.3}%
-\contentsline {section}{\numberline {5.6}Đánh giá hệ thống phát hiện vi phạm}{41}{section.5.6}%
-\contentsline {subsection}{\numberline {5.6.1}Phân tích kết quả nhận diện}{43}{subsection.5.6.1}%
-\contentsline {subsubsection}{Tính chính xác của Logic}{43}{subsubsection*.69}%
-\contentsline {subsubsection}{Khả năng phát hiện vật thể}{43}{subsubsection*.70}%
-\contentsline {subsection}{\numberline {5.6.2}Đánh giá về thách thức môi trường}{43}{subsection.5.6.2}%
-\contentsline {subsection}{\numberline {5.6.3}Minh họa kết quả phát hiện vi phạm}{44}{subsection.5.6.3}%
-\contentsline {section}{\numberline {5.7}Thách thức và Hạn chế}{44}{section.5.7}%
-\contentsline {subsection}{\numberline {5.7.1}Các trường hợp khó với phát hiện phương tiện}{44}{subsection.5.7.1}%
-\contentsline {subsection}{\numberline {5.7.2}Các trường hợp khó với nhận diện biển số}{44}{subsection.5.7.2}%
-\contentsline {subsection}{\numberline {5.7.3}Hạn chế hiện tại của hệ thống}{44}{subsection.5.7.3}%
-\contentsline {section}{\numberline {5.8}Tổng kết thực nghiệm}{44}{section.5.8}%
-\contentsline {chapter}{\numberline {6}Kết luận và Hướng phát triển}{47}{chapter.6}%
-\contentsline {section}{\numberline {6.1}Kết luận}{47}{section.6.1}%
-\contentsline {subsection}{\numberline {6.1.1}Những đóng góp chính}{47}{subsection.6.1.1}%
-\contentsline {subsection}{\numberline {6.1.2}Ý nghĩa thực tiễn}{48}{subsection.6.1.2}%
-\contentsline {subsection}{\numberline {6.1.3}Những hạn chế}{48}{subsection.6.1.3}%
-\contentsline {section}{\numberline {6.2}Hướng phát triển}{48}{section.6.2}%
-\contentsline {subsection}{\numberline {6.2.1}Ngắn hạn (3-6 tháng)}{49}{subsection.6.2.1}%
-\contentsline {subsection}{\numberline {6.2.2}Trung hạn (6-12 tháng)}{49}{subsection.6.2.2}%
-\contentsline {subsection}{\numberline {6.2.3}Dài hạn (1-2 năm)}{49}{subsection.6.2.3}%
-\contentsline {section}{\numberline {6.3}Lời kết}{50}{section.6.3}%
+\contentsline {subsubsection}{Kernel Sharpening}{22}{subsubsection*.31}%
+\contentsline {subsubsection}{Nguyên lý}{22}{subsubsection*.32}%
+\contentsline {subsection}{\numberline {3.4.3}Quy trình tiền xử lý hoàn chỉnh}{22}{subsection.3.4.3}%
+\contentsline {section}{\numberline {3.5}So sánh các phiên bản YOLOv8}{22}{section.3.5}%
+\contentsline {section}{\numberline {3.6}Cơ chế Validation \& Retry}{23}{section.3.6}%
+\contentsline {subsection}{\numberline {3.6.1}Vấn đề với OCR đơn frame}{23}{subsection.3.6.1}%
+\contentsline {subsection}{\numberline {3.6.2}Giải pháp: Format Validation}{23}{subsection.3.6.2}%
+\contentsline {subsection}{\numberline {3.6.3}Retry Mechanism}{23}{subsection.3.6.3}%
+\contentsline {section}{\numberline {3.7}Character Correction cho biển số Việt Nam}{24}{section.3.7}%
+\contentsline {subsection}{\numberline {3.7.1}Các lỗi phổ biến của OCR}{24}{subsection.3.7.1}%
+\contentsline {subsection}{\numberline {3.7.2}Logic hiệu chỉnh dựa trên định dạng}{24}{subsection.3.7.2}%
+\contentsline {section}{\numberline {3.8}Hai phương pháp triển khai ALPR}{24}{section.3.8}%
+\contentsline {subsection}{\numberline {3.8.1}Phương pháp 1: Two-Stage ALPR (Hai giai đoạn)}{24}{subsection.3.8.1}%
+\contentsline {subsubsection}{Kiến trúc}{24}{subsubsection*.36}%
+\contentsline {subsubsection}{Ưu điểm}{24}{subsubsection*.37}%
+\contentsline {subsubsection}{Nhược điểm}{25}{subsubsection*.38}%
+\contentsline {subsection}{\numberline {3.8.2}Phương pháp 2: One-Stage Semi-supervised (Một giai đoạn)}{25}{subsection.3.8.2}%
+\contentsline {subsubsection}{Kiến trúc}{25}{subsubsection*.39}%
+\contentsline {subsubsection}{Quy trình gán nhãn bán giám sát (Semi-supervised)}{25}{subsubsection*.40}%
+\contentsline {subsubsection}{Ưu điểm}{25}{subsubsection*.41}%
+\contentsline {subsubsection}{Nhược điểm}{25}{subsubsection*.42}%
+\contentsline {subsection}{\numberline {3.8.3}So sánh hai phương pháp}{26}{subsection.3.8.3}%
+\contentsline {chapter}{\numberline {4}Phương pháp thực hiện}{27}{chapter.4}%
+\contentsline {section}{\numberline {4.1}Kiến trúc tổng thể của hệ thống}{27}{section.4.1}%
+\contentsline {section}{\numberline {4.2}Chuẩn bị dữ liệu phát hiện phương tiện}{27}{section.4.2}%
+\contentsline {subsection}{\numberline {4.2.1}Quy trình thu thập dữ liệu}{27}{subsection.4.2.1}%
+\contentsline {subsubsection}{Thu thập dữ liệu thô}{27}{subsubsection*.45}%
+\contentsline {subsubsection}{Gán nhãn dữ liệu}{27}{subsubsection*.46}%
+\contentsline {subsection}{\numberline {4.2.2}Tiền xử lý dữ liệu}{29}{subsection.4.2.2}%
+\contentsline {section}{\numberline {4.3}Huấn luyện mô hình phát hiện phương tiện}{30}{section.4.3}%
+\contentsline {subsection}{\numberline {4.3.1}Cấu hình huấn luyện}{30}{subsection.4.3.1}%
+\contentsline {subsection}{\numberline {4.3.2}Quá trình tối ưu hóa}{30}{subsection.4.3.2}%
+\contentsline {section}{\numberline {4.4}Thuật toán xác định hướng di chuyển}{30}{section.4.4}%
+\contentsline {subsection}{\numberline {4.4.1}Phân tích quỹ đạo với Reference Vector (Trajectory-based)}{30}{subsection.4.4.1}%
+\contentsline {subsection}{\numberline {4.4.2}Xác định hướng dựa trên vùng quan tâm (ROI-based)}{31}{subsection.4.4.2}%
+\contentsline {subsection}{\numberline {4.4.3}Cơ chế kết hợp (Direction Fusion)}{31}{subsection.4.4.3}%
+\contentsline {section}{\numberline {4.5}Hệ thống phát hiện vi phạm}{32}{section.4.5}%
+\contentsline {subsection}{\numberline {4.5.1}Quản lý tín hiệu đèn giao thông}{32}{subsection.4.5.1}%
+\contentsline {subsection}{\numberline {4.5.2}Logic phát hiện vượt đèn đỏ}{32}{subsection.4.5.2}%
+\contentsline {subsection}{\numberline {4.5.3}Logic phát hiện sai làn đường}{32}{subsection.4.5.3}%
+\contentsline {subsection}{\numberline {4.5.4}Điểm chạm tham chiếu (Reference Point)}{32}{subsection.4.5.4}%
+\contentsline {subsection}{\numberline {4.5.5}Ngưỡng dung sai}{32}{subsection.4.5.5}%
+\contentsline {section}{\numberline {4.6}Pipeline nhận diện biển số xe (ALPR)}{32}{section.4.6}%
+\contentsline {subsection}{\numberline {4.6.1}Phương pháp 1: Mô hình phát hiện biển số chuyên biệt}{33}{subsection.4.6.1}%
+\contentsline {subsubsection}{Tổng quan Pipeline}{33}{subsubsection*.51}%
+\contentsline {subsubsection}{Plate Detection với YOLOv8}{33}{subsubsection*.53}%
+\contentsline {subsubsection}{Bộ dữ liệu VNLP}{35}{subsubsection*.55}%
+\contentsline {subsection}{\numberline {4.6.2}Phương pháp 2: Tích hợp phát hiện đa lớp (Semi-supervised)}{35}{subsection.4.6.2}%
+\contentsline {subsubsection}{Tổng quan Pipeline}{35}{subsubsection*.56}%
+\contentsline {subsubsection}{Quy trình gán nhãn bán giám sát (Semi-supervised Labeling)}{35}{subsubsection*.58}%
+\contentsline {subsubsection}{Huấn luyện mô hình tích hợp}{37}{subsubsection*.59}%
+\contentsline {section}{\numberline {4.7}Tiền xử lý ảnh biển số}{37}{section.4.7}%
+\contentsline {subsection}{\numberline {4.7.1}Bước 1: CLAHE (Contrast Limited Adaptive Histogram Equalization)}{37}{subsection.4.7.1}%
+\contentsline {subsection}{\numberline {4.7.2}Bước 2: Sharpening}{37}{subsection.4.7.2}%
+\contentsline {section}{\numberline {4.8}OCR với PaddleOCR}{37}{section.4.8}%
+\contentsline {subsection}{\numberline {4.8.1}Cấu hình PaddleOCR}{37}{subsection.4.8.1}%
+\contentsline {subsection}{\numberline {4.8.2}Character Correction}{37}{subsection.4.8.2}%
+\contentsline {section}{\numberline {4.9}Validation \& Retry Mechanism}{38}{section.4.9}%
+\contentsline {subsection}{\numberline {4.9.1}Vấn đề}{38}{subsection.4.9.1}%
+\contentsline {subsection}{\numberline {4.9.2}Giải pháp: Format Validation}{38}{subsection.4.9.2}%
+\contentsline {subsection}{\numberline {4.9.3}Retry Mechanism}{38}{subsection.4.9.3}%
+\contentsline {section}{\numberline {4.10}Tích hợp với Vehicle Tracking}{39}{section.4.10}%
+\contentsline {section}{\numberline {4.11}Tổng kết phương pháp}{39}{section.4.11}%
+\contentsline {chapter}{\numberline {5}Thực nghiệm và Đánh giá kết quả}{40}{chapter.5}%
+\contentsline {section}{\numberline {5.1}Môi trường thực nghiệm}{40}{section.5.1}%
+\contentsline {subsection}{\numberline {5.1.1}Cấu hình phần cứng}{40}{subsection.5.1.1}%
+\contentsline {subsection}{\numberline {5.1.2}Cấu hình phần mềm}{40}{subsection.5.1.2}%
+\contentsline {section}{\numberline {5.2}Kết quả huấn luyện mô hình phát hiện phương tiện}{41}{section.5.2}%
+\contentsline {subsection}{\numberline {5.2.1}Thiết lập huấn luyện}{41}{subsection.5.2.1}%
+\contentsline {subsubsection}{Chiến lược tăng cường dữ liệu}{41}{subsubsection*.62}%
+\contentsline {subsection}{\numberline {5.2.2}Phân tích quá trình hội tụ}{41}{subsection.5.2.2}%
+\contentsline {subsection}{\numberline {5.2.3}Kết quả định lượng}{43}{subsection.5.2.3}%
+\contentsline {subsubsection}{Kết quả chi tiết theo từng lớp}{43}{subsubsection*.66}%
+\contentsline {subsection}{\numberline {5.2.4}Phân tích lỗi qua ma trận nhầm lẫn}{43}{subsection.5.2.4}%
+\contentsline {subsection}{\numberline {5.2.5}Đánh giá định tính}{43}{subsection.5.2.5}%
+\contentsline {section}{\numberline {5.3}Kết quả huấn luyện Plate Detection}{44}{section.5.3}%
+\contentsline {subsection}{\numberline {5.3.1}Quá trình huấn luyện}{44}{subsection.5.3.1}%
+\contentsline {subsection}{\numberline {5.3.2}Kết quả cuối cùng}{44}{subsection.5.3.2}%
+\contentsline {subsection}{\numberline {5.3.3}Ma trận nhầm lẫn Plate Detection}{44}{subsection.5.3.3}%
+\contentsline {section}{\numberline {5.4}Kết quả huấn luyện Mô hình tích hợp (6 lớp)}{47}{section.5.4}%
+\contentsline {subsection}{\numberline {5.4.1}Kết quả định lượng}{47}{subsection.5.4.1}%
+\contentsline {subsection}{\numberline {5.4.2}Đánh giá trực quan}{48}{subsection.5.4.2}%
+\contentsline {section}{\numberline {5.5}Kết quả Inference thực tế}{48}{section.5.5}%
+\contentsline {subsection}{\numberline {5.5.1}Môi trường thử nghiệm}{48}{subsection.5.5.1}%
+\contentsline {subsection}{\numberline {5.5.2}Đánh giá Phương pháp 1 (Two-Stage: Model chuyên biệt)}{49}{subsection.5.5.2}%
+\contentsline {subsubsection}{Hiệu năng Phương pháp 1}{49}{subsubsection*.76}%
+\contentsline {subsection}{\numberline {5.5.3}Đánh giá Phương pháp 2 (One-Stage: Model tích hợp)}{49}{subsection.5.5.3}%
+\contentsline {subsubsection}{Ưu điểm của Phương pháp 2}{49}{subsubsection*.78}%
+\contentsline {subsubsection}{Hạn chế của Phương pháp 2}{49}{subsubsection*.79}%
+\contentsline {subsubsection}{Hiệu năng Phương pháp 2}{49}{subsubsection*.80}%
+\contentsline {subsection}{\numberline {5.5.4}So sánh hiệu năng hai phương pháp}{49}{subsection.5.5.4}%
+\contentsline {subsubsection}{Khuyến nghị sử dụng}{49}{subsubsection*.83}%
+\contentsline {section}{\numberline {5.6}Đánh giá hệ thống phát hiện vi phạm}{51}{section.5.6}%
+\contentsline {subsection}{\numberline {5.6.1}Phân tích kết quả nhận diện}{51}{subsection.5.6.1}%
+\contentsline {subsubsection}{Tính chính xác của Logic}{51}{subsubsection*.84}%
+\contentsline {subsubsection}{Khả năng phát hiện vật thể}{51}{subsubsection*.85}%
+\contentsline {subsection}{\numberline {5.6.2}Đánh giá về thách thức môi trường}{52}{subsection.5.6.2}%
+\contentsline {subsection}{\numberline {5.6.3}Minh họa kết quả phát hiện vi phạm}{52}{subsection.5.6.3}%
+\contentsline {section}{\numberline {5.7}Thách thức và Hạn chế}{52}{section.5.7}%
+\contentsline {subsection}{\numberline {5.7.1}Các trường hợp khó với phát hiện phương tiện}{52}{subsection.5.7.1}%
+\contentsline {subsection}{\numberline {5.7.2}Các trường hợp khó với nhận diện biển số}{52}{subsection.5.7.2}%
+\contentsline {subsection}{\numberline {5.7.3}Hạn chế hiện tại của hệ thống}{52}{subsection.5.7.3}%
+\contentsline {section}{\numberline {5.8}Tổng kết thực nghiệm}{54}{section.5.8}%
+\contentsline {chapter}{\numberline {6}Kết luận và Hướng phát triển}{55}{chapter.6}%
+\contentsline {section}{\numberline {6.1}Kết luận}{55}{section.6.1}%
+\contentsline {subsection}{\numberline {6.1.1}Những đóng góp chính}{55}{subsection.6.1.1}%
+\contentsline {subsection}{\numberline {6.1.2}Ý nghĩa thực tiễn}{56}{subsection.6.1.2}%
+\contentsline {subsection}{\numberline {6.1.3}Những hạn chế}{56}{subsection.6.1.3}%
+\contentsline {section}{\numberline {6.2}Hướng phát triển}{56}{section.6.2}%
+\contentsline {subsection}{\numberline {6.2.1}Ngắn hạn (3-6 tháng)}{56}{subsection.6.2.1}%
+\contentsline {subsection}{\numberline {6.2.2}Trung hạn (6-12 tháng)}{57}{subsection.6.2.2}%
+\contentsline {subsection}{\numberline {6.2.3}Dài hạn (1-2 năm)}{57}{subsection.6.2.3}%
+\contentsline {section}{\numberline {6.3}Lời kết}{58}{section.6.3}%

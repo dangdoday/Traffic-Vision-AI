@@ -8,14 +8,14 @@ Hệ thống nhận diện biển số xe tự động (Automatic License Plate 
     \item \textbf{Character Recognition (OCR):} Nhận dạng các ký tự trên biển số
 \end{enumerate}
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \begin{tikzpicture}[
-        node distance=2cm,
-        box/.style={rectangle, draw, rounded corners, minimum width=3cm, minimum height=1cm, align=center, fill=blue!10},
+        node distance=1cm,
+        box/.style={rectangle, draw, rounded corners, minimum width=2.2cm, minimum height=0.9cm, align=center, fill=blue!10, font=\small},
         arrow/.style={->, thick, >=stealth}
     ]
-        \node[box] (input) {Ảnh đầu vào};
+        \node[box] (input) {Ảnh\\đầu vào};
         \node[box, right=of input] (detect) {Plate\\Detection};
         \node[box, right=of detect] (preprocess) {Tiền xử lý\\(CLAHE)};
         \node[box, right=of preprocess] (ocr) {OCR};
@@ -26,7 +26,7 @@ Hệ thống nhận diện biển số xe tự động (Automatic License Plate 
         \draw[arrow] (preprocess) -- (ocr);
         \draw[arrow] (ocr) -- (output);
     \end{tikzpicture}
-    \caption{Pipeline tổng quan của hệ thống ALPR}
+    \caption{Pipeline tổng quan của\\hệ thống ALPR}
     \label{fig:alpr_pipeline}
 \end{figure}
 
@@ -77,25 +77,25 @@ PaddleOCR sử dụng kiến trúc CRNN (Convolutional Recurrent Neural Network)
     \item \textbf{CTC Decoder:} Giải mã chuỗi ký tự cuối cùng từ output của LSTM.
 \end{enumerate}
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \begin{tikzpicture}[
-        node distance=1.8cm,
-        box/.style={rectangle, draw, rounded corners, minimum width=2.8cm, minimum height=1cm, align=center, fill=green!10},
+        node distance=1cm,
+        box/.style={rectangle, draw, rounded corners, minimum width=2.2cm, minimum height=0.9cm, align=center, fill=green!10, font=\small},
         arrow/.style={->, thick, >=stealth}
     ]
-        \node[box] (input) {Ảnh biển số\\$H \times W \times 3$};
+        \node[box] (input) {Ảnh biển số\\$H \times W$};
         \node[box, right=of input] (cnn) {CNN\\Backbone};
         \node[box, right=of cnn] (lstm) {Bi-LSTM\\$T \times D$};
         \node[box, right=of lstm] (ctc) {CTC\\Decoder};
-        \node[box, right=of ctc] (output) {``30G07784''};
+        \node[box, right=of ctc] (output) {30G07784};
 
         \draw[arrow] (input) -- (cnn);
         \draw[arrow] (cnn) -- (lstm);
         \draw[arrow] (lstm) -- (ctc);
         \draw[arrow] (ctc) -- (output);
     \end{tikzpicture}
-    \caption{Kiến trúc CRNN cho OCR trong PaddleOCR}
+    \caption{Kiến trúc CRNN cho OCR\\trong PaddleOCR}
     \label{fig:crnn_arch}
 \end{figure}
 
@@ -301,3 +301,91 @@ Thuật toán hiệu chỉnh:
     \item Tại mỗi vị trí, kiểm tra xem ký tự có đúng loại (chữ/số) không
     \item Nếu sai loại, tra bảng mapping để sửa
 \end{enumerate}
+
+%============================================================
+% SECTION MỚI: HAI PHƯƠNG PHÁP TRIỂN KHAI ALPR
+%============================================================
+\section{Hai phương pháp triển khai ALPR}
+
+Trong hệ thống của chúng tôi, có hai cách tiếp cận để thực hiện nhận diện biển số xe:
+
+\subsection{Phương pháp 1: Two-Stage ALPR (Hai giai đoạn)}
+
+Đây là phương pháp truyền thống, chia quá trình thành hai bước độc lập:
+
+\subsubsection{Kiến trúc}
+\begin{enumerate}
+    \item \textbf{Giai đoạn 1 - Phát hiện phương tiện:} Sử dụng YOLOv8n (5 lớp) để phát hiện các loại xe (xe máy, xe đạp, ô tô, xe buýt, xe tải)
+    \item \textbf{Giai đoạn 2 - Phát hiện biển số:} Crop vùng xe từ giai đoạn 1, chạy qua YOLOv8n chuyên biệt (1 lớp: license\_plate) để phát hiện biển số
+    \item \textbf{Giai đoạn 3 - OCR:} Crop vùng biển số, áp dụng tiền xử lý (CLAHE, sharpening), sau đó sử dụng PaddleOCR để nhận dạng ký tự
+\end{enumerate}
+
+\subsubsection{Ưu điểm}
+\begin{itemize}
+    \item \textbf{Độ chính xác cao:} Mô hình chuyên biệt cho biển số đạt mAP@50 = 99.5\%
+    \item \textbf{Phát hiện biển nhỏ tốt:} Vì chỉ focus vào 1 task (plate detection), mô hình học rất tốt các đặc trưng của biển số
+    \item \textbf{Linh hoạt:} Có thể thay thế từng module độc lập (ví dụ: thay YOLOv8 bằng Faster R-CNN cho plate detection)
+\end{itemize}
+
+\subsubsection{Nhược điểm}
+\begin{itemize}
+    \item \textbf{Chậm:} Cần 2 lần inference qua YOLO (vehicle detection + plate detection), tốc độ chỉ đạt 5--10 FPS
+    \item \textbf{Tiêu tốn tài nguyên:} Phải load 2 models YOLOv8 vào GPU/RAM (~2.5GB)
+    \item \textbf{Phức tạp:} Logic phải quản lý 2 models, crop vùng xe, rồi mới detect plate
+\end{itemize}
+
+\subsection{Phương pháp 2: One-Stage Semi-supervised (Một giai đoạn)}
+
+Phương pháp này tích hợp việc phát hiện phương tiện và biển số vào một mô hình duy nhất.
+
+\subsubsection{Kiến trúc}
+\begin{enumerate}
+    \item \textbf{Giai đoạn 1 - Phát hiện đa lớp:} Sử dụng YOLOv8n (6 lớp) để phát hiện đồng thời cả xe và biển số trong một lần forward pass
+    \item \textbf{Giai đoạn 2 - Matching:} Sử dụng thuật toán containment để gán biển số cho xe (kiểm tra xem bbox biển có nằm trong bbox xe không)
+    \item \textbf{Giai đoạn 3 - OCR:} Tương tự Phương pháp 1, crop vùng biển số và nhận dạng ký tự
+\end{enumerate}
+
+\subsubsection{Quy trình gán nhãn bán giám sát (Semi-supervised)}
+Để có được mô hình 6 lớp, chúng tôi áp dụng kỹ thuật Semi-supervised Labeling:
+\begin{enumerate}
+    \item \textbf{Chuẩn bị Teacher Model:} Sử dụng mô hình phát hiện biển số từ Phương pháp 1 (mAP@50 = 99.5\%) làm teacher
+    \item \textbf{Tự động gán nhãn:} Chạy teacher model trên toàn bộ dataset vietnam\_vehicle\_dataset (chỉ có 5 lớp xe) để tự động phát hiện và gán nhãn biển số
+    \item \textbf{Hợp nhất dataset:} Merge các annotation biển số vào file gốc, tạo thành dataset 6 lớp (5 loại xe + license\_plate)
+    \item \textbf{Huấn luyện lại:} Train YOLOv8n từ đầu trên dataset 6 lớp này
+\end{enumerate}
+
+\subsubsection{Ưu điểm}
+\begin{itemize}
+    \item \textbf{Nhanh:} Chỉ cần 1 lần inference qua YOLO, tốc độ đạt 15--20 FPS
+    \item \textbf{Tiết kiệm tài nguyên:} Chỉ cần load 1 model (~1.2GB)
+    \item \textbf{Mapping tự động:} Dễ dàng gán biển số cho xe thông qua kiểm tra containment
+    \item \textbf{Học ngữ cảnh:} Mô hình học được mối quan hệ không gian giữa xe và biển số
+\end{itemize}
+
+\subsubsection{Nhược điểm}
+\begin{itemize}
+    \item \textbf{Độ chính xác thấp hơn:} mAP@50 cho tất cả lớp chỉ đạt 78.5\% (do class imbalance)
+    \item \textbf{Khó phát hiện biển nhỏ:} Biển số chiếm tỷ lệ nhỏ trong dataset, dễ bị miss khi xe ở xa
+    \item \textbf{Phụ thuộc teacher model:} Chất lượng annotation tự động phụ thuộc vào độ chính xác của teacher model
+\end{itemize}
+
+\subsection{So sánh hai phương pháp}
+
+\begin{table}[!ht]
+\centering
+\caption{So sánh hai phương pháp triển khai ALPR}
+\label{tab:alpr_method_comparison_theory}
+\begin{tabular}{|l|p{5cm}|p{5cm}|}
+\hline
+\textbf{Tiêu chí} & \textbf{Phương pháp 1 (Two-Stage)} & \textbf{Phương pháp 2 (One-Stage)} \\ \hline
+Số model & 2 (Vehicle + Plate) & 1 (6-class) \\ \hline
+Tốc độ & Chậm (5--10 FPS) & Nhanh (15--20 FPS) \\ \hline
+Độ chính xác plate & Cao (99.5\%) & Trung bình (78.5\%) \\ \hline
+Tài nguyên & Nhiều (~2.5GB) & Ít (~1.2GB) \\ \hline
+Triển khai & Phức tạp & Đơn giản \\ \hline
+Sử dụng tốt nhất & Yêu cầu độ chính xác cao, camera tốt & Ưu tiên tốc độ, real-time \\ \hline
+\end{tabular}
+\end{table}
+
+Trong thực tế, chúng tôi triển khai cả hai phương pháp và cho phép người dùng lựa chọn phù hợp với nhu cầu của hệ thống (độ chính xác cao vs. tốc độ nhanh).
+

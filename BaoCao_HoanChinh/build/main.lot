@@ -2,20 +2,22 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {3.1}{\ignorespaces Các định dạng biển số xe Việt Nam}}{18}{table.caption.27}%
-\contentsline {table}{\numberline {3.2}{\ignorespaces So sánh các phiên bản YOLOv8}}{21}{table.caption.33}%
-\contentsline {table}{\numberline {3.3}{\ignorespaces Bảng hiệu chỉnh ký tự phổ biến}}{23}{table.caption.35}%
+\contentsline {table}{\numberline {3.1}{\ignorespaces Các định dạng biển số xe Việt Nam}}{19}{table.caption.27}%
+\contentsline {table}{\numberline {3.2}{\ignorespaces So sánh các phiên bản YOLOv8}}{22}{table.caption.33}%
+\contentsline {table}{\numberline {3.3}{\ignorespaces Bảng hiệu chỉnh ký tự phổ biến}}{24}{table.caption.35}%
+\contentsline {table}{\numberline {3.4}{\ignorespaces So sánh hai phương pháp triển khai ALPR}}{26}{table.caption.43}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {4.1}{\ignorespaces Tham số cấu hình huấn luyện YOLOv8 cho phát hiện phương tiện}}{27}{table.caption.40}%
-\contentsline {table}{\numberline {4.2}{\ignorespaces Cấu hình huấn luyện Plate Detection}}{30}{table.caption.46}%
-\contentsline {table}{\numberline {4.3}{\ignorespaces Bảng hiệu chỉnh ký tự}}{33}{table.caption.50}%
+\contentsline {table}{\numberline {4.1}{\ignorespaces Tham số cấu hình huấn luyện YOLOv8 cho phát hiện phương tiện}}{30}{table.caption.48}%
+\contentsline {table}{\numberline {4.2}{\ignorespaces Cấu hình huấn luyện Plate Detection}}{35}{table.caption.54}%
+\contentsline {table}{\numberline {4.3}{\ignorespaces Bảng hiệu chỉnh ký tự}}{38}{table.caption.60}%
 \addvspace {10\p@ }
-\contentsline {table}{\numberline {5.1}{\ignorespaces Cấu hình chi tiết môi trường thực nghiệm}}{35}{table.caption.51}%
-\contentsline {table}{\numberline {5.2}{\ignorespaces Kết quả đánh giá hiệu năng mô hình YOLOv8n phát hiện phương tiện}}{37}{table.caption.55}%
-\contentsline {table}{\numberline {5.3}{\ignorespaces Kết quả mAP@50 theo từng lớp phương tiện}}{37}{table.caption.57}%
-\contentsline {table}{\numberline {5.4}{\ignorespaces Kết quả huấn luyện Plate Detection (Epoch 100)}}{40}{table.caption.61}%
-\contentsline {table}{\numberline {5.5}{\ignorespaces Kết quả huấn luyện Mô hình tích hợp 6 lớp}}{40}{table.caption.63}%
-\contentsline {table}{\numberline {5.6}{\ignorespaces Hiệu năng thực tế Phương pháp 1 (Two-Stage)}}{43}{table.caption.67}%
-\contentsline {table}{\numberline {5.7}{\ignorespaces Bảng so sánh hiệu năng hai phương pháp phát hiện biển số}}{43}{table.caption.68}%
-\contentsline {table}{\numberline {5.8}{\ignorespaces Tổng hợp kết quả thực nghiệm toàn hệ thống}}{46}{table.caption.73}%
+\contentsline {table}{\numberline {5.1}{\ignorespaces Cấu hình chi tiết môi trường thực nghiệm}}{40}{table.caption.61}%
+\contentsline {table}{\numberline {5.2}{\ignorespaces Kết quả đánh giá hiệu năng mô hình YOLOv8n phát hiện phương tiện}}{43}{table.caption.65}%
+\contentsline {table}{\numberline {5.3}{\ignorespaces Kết quả mAP@50 theo từng lớp phương tiện}}{43}{table.caption.67}%
+\contentsline {table}{\numberline {5.4}{\ignorespaces Kết quả huấn luyện Plate Detection (Epoch 100)}}{47}{table.caption.71}%
+\contentsline {table}{\numberline {5.5}{\ignorespaces Kết quả huấn luyện Mô hình tích hợp 6 lớp}}{47}{table.caption.73}%
+\contentsline {table}{\numberline {5.6}{\ignorespaces Hiệu năng thực tế Phương pháp 1 (Two-Stage)}}{49}{table.caption.77}%
+\contentsline {table}{\numberline {5.7}{\ignorespaces Hiệu năng thực tế Phương pháp 2 (One-Stage)}}{51}{table.caption.81}%
+\contentsline {table}{\numberline {5.8}{\ignorespaces Bảng so sánh hiệu năng hai phương pháp phát hiện biển số}}{51}{table.caption.82}%
+\contentsline {table}{\numberline {5.9}{\ignorespaces Tổng hợp kết quả thực nghiệm toàn hệ thống}}{54}{table.caption.88}%
 \addvspace {10\p@ }

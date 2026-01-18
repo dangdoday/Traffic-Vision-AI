@@ -65,7 +65,7 @@ Nếu không có đối tượng trong ô lưới, $Pr(\text{Object}) = 0$, dẫ
 \end{equation}
 Trong đó $(t_x, t_y)$ là tọa độ tâm cục bộ trong ô lưới, $(t_w, t_h)$ là kích thước khung bao được chuẩn hóa, và $t_o$ là độ tin cậy.
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=0.8\linewidth]{../BÁO_CÁO_ADVC/Figures/chia_luoi.png}
     \caption{Cơ chế chia lưới và biểu diễn đầu ra của YOLO}
@@ -257,7 +257,7 @@ Khi nhận được phép đo mới (measurement) $\mathbf{z}_k$ từ YOLOv8 (t�
 \end{equation}
 Trong đó $\mathbf{K}_k$ là độ lợi Kalman (Kalman Gain), $\mathbf{H}_k$ là ma trận quan sát, và $\mathbf{R}_k$ là nhiễu đo lường.
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \begin{tikzpicture}[node distance=3cm, auto]
         % Nodes (Đã thêm text width=5cm và align=center để sửa lỗi LR mode)
@@ -353,7 +353,7 @@ Hệ thống ưu tiên liên kết các detection chất lượng cao ($\mathcal
     \item \textit{Kết quả:} Nếu ghép nối thành công, Track đó sẽ được duy trì (giữ nguyên ID cũ) dù điểm detection thấp. Điều này giúp quỹ đạo liền mạch ngay cả khi xe đi khuất sau xe khác.
 \end{itemize}
 
-\begin{figure}[H]
+\begin{figure}[!htbp]
     \centering
     \includegraphics[width=0.8\linewidth]{../BÁO_CÁO_ADVC/Figures/bytetrack.png}
     \caption{Minh họa quy trình liên kết hai giai đoạn của ByteTrack}
@@ -443,7 +443,7 @@ Phân loại hướng di chuyển với ngưỡng \(50^\circ\):
 \textbf{Giải thích lựa chọn ngưỡng 50°:} Ngưỡng $50^\circ$ được chọn dựa trên thực nghiệm với các video giao thông tại Việt Nam, phù hợp với đặc thù giao thông hỗn hợp nơi xe thường di chuyển theo nhiều hướng khác nhau tại các ngã tư. Ngưỡng này đủ rộng để không nhận diện sai các xe đi thẳng nhưng có độ lệch nhỏ do điều kiện đường sá, đồng thời đủ chặt để phân biệt rõ ràng giữa đi thẳng và rẽ.
 
 % Minh họa vector tham chiếu vs. vector chuyển động
-\begin{figure}[H]
+\begin{figure}[!htbp]
   \centering
   \begin{tikzpicture}[scale=1.6]
     \coordinate (O) at (0,0);
@@ -468,3 +468,4 @@ Phân loại hướng di chuyển với ngưỡng \(50^\circ\):
   \caption{So sánh góc chuyển động $\vec v$ với góc tham chiếu $\vec r$ (ngưỡng $50^\circ$). Vùng màu xanh lá: đi thẳng, vùng ngoài: rẽ trái/phải.}
   \label{fig:direction_reference}
 \end{figure}
+

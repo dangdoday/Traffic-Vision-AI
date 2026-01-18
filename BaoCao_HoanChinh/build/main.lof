@@ -2,25 +2,26 @@
 \addvspace {10\p@ }
 \addvspace {10\p@ }
 \contentsline {figure}{\numberline {2.1}{\ignorespaces Cơ chế chia lưới và biểu diễn đầu ra của YOLO}}{7}{figure.caption.7}%
-\contentsline {figure}{\numberline {2.2}{\ignorespaces Chu trình hoạt động của Bộ lọc Kalman}}{13}{figure.caption.16}%
+\contentsline {figure}{\numberline {2.2}{\ignorespaces Chu trình hoạt động của Bộ lọc Kalman}}{12}{figure.caption.16}%
 \contentsline {figure}{\numberline {2.3}{\ignorespaces Minh họa quy trình liên kết hai giai đoạn của ByteTrack}}{15}{figure.caption.19}%
-\contentsline {figure}{\numberline {2.4}{\ignorespaces So sánh góc chuyển động $\vec v$ với góc tham chiếu $\vec r$ (ngưỡng $50^\circ $). Vùng màu xanh lá: đi thẳng, vùng ngoài: rẽ trái/phải.}}{17}{figure.caption.25}%
+\contentsline {figure}{\numberline {2.4}{\ignorespaces So sánh góc chuyển động $\vec v$ với góc tham chiếu $\vec r$ (ngưỡng $50^\circ $). Vùng màu xanh lá: đi thẳng, vùng ngoài: rẽ trái/phải.}}{18}{figure.caption.25}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {3.1}{\ignorespaces Pipeline tổng quan của hệ thống ALPR}}{18}{figure.caption.26}%
-\contentsline {figure}{\numberline {3.2}{\ignorespaces Kiến trúc CRNN cho OCR trong PaddleOCR}}{19}{figure.caption.28}%
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Pipeline tổng quan của hệ thống ALPR}}{19}{figure.caption.26}%
+\contentsline {figure}{\numberline {3.2}{\ignorespaces Kiến trúc CRNN cho OCR trong PaddleOCR}}{20}{figure.caption.28}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {4.1}{\ignorespaces Sơ đồ luồng xử lý chi tiết với cơ chế Direction Fusion và ALPR}}{25}{figure.caption.36}%
-\contentsline {figure}{\numberline {4.2}{\ignorespaces Phân bố số lượng nhãn và vị trí không gian của các đối tượng}}{26}{figure.caption.39}%
-\contentsline {figure}{\numberline {4.3}{\ignorespaces Pipeline xử lý nhận diện biển số xe}}{31}{figure.caption.44}%
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Sơ đồ luồng xử lý chi tiết với cơ chế Direction Fusion và ALPR}}{28}{figure.caption.44}%
+\contentsline {figure}{\numberline {4.2}{\ignorespaces Phân bố số lượng nhãn và vị trí không gian của các đối tượng}}{29}{figure.caption.47}%
+\contentsline {figure}{\numberline {4.3}{\ignorespaces Pipeline xử lý nhận diện biển số xe}}{34}{figure.caption.52}%
+\contentsline {figure}{\numberline {4.4}{\ignorespaces Pipeline Phương pháp 2: Phát hiện đồng thời xe và biển số trong một mô hình}}{36}{figure.caption.57}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {5.1}{\ignorespaces Dữ liệu huấn luyện sau khi áp dụng Mosaic Augmentation}}{36}{figure.caption.53}%
-\contentsline {figure}{\numberline {5.2}{\ignorespaces Đồ thị Loss và mAP trong quá trình huấn luyện phát hiện phương tiện}}{37}{figure.caption.54}%
-\contentsline {figure}{\numberline {5.3}{\ignorespaces Ma trận nhầm lẫn chuẩn hóa (Normalized Confusion Matrix)}}{38}{figure.caption.58}%
-\contentsline {figure}{\numberline {5.4}{\ignorespaces Kết quả dự đoán thực tế trên tập Validation (Batch 0)}}{39}{figure.caption.59}%
-\contentsline {figure}{\numberline {5.5}{\ignorespaces Đường cong Loss và Metrics trong quá trình huấn luyện Plate Detection}}{39}{figure.caption.60}%
-\contentsline {figure}{\numberline {5.6}{\ignorespaces Ma trận nhầm lẫn Plate Detection (Normalized)}}{40}{figure.caption.62}%
-\contentsline {figure}{\numberline {5.7}{\ignorespaces Đường cong Loss và Metrics của mô hình tích hợp 6 lớp}}{41}{figure.caption.64}%
-\contentsline {figure}{\numberline {5.8}{\ignorespaces Kết quả inference thực tế Phương pháp 1 (Two-Stage)}}{42}{figure.caption.65}%
-\contentsline {figure}{\numberline {5.9}{\ignorespaces Minh hoạ các phương tiện với tín hiệu đèn giao thông}}{45}{figure.caption.71}%
-\contentsline {figure}{\numberline {5.10}{\ignorespaces Minh hoạ xe vi phạm làn đường}}{46}{figure.caption.72}%
+\contentsline {figure}{\numberline {5.1}{\ignorespaces Dữ liệu huấn luyện sau khi áp dụng Mosaic Augmentation}}{41}{figure.caption.63}%
+\contentsline {figure}{\numberline {5.2}{\ignorespaces Đồ thị Loss và mAP trong quá trình huấn luyện phát hiện phương tiện}}{42}{figure.caption.64}%
+\contentsline {figure}{\numberline {5.3}{\ignorespaces Ma trận nhầm lẫn chuẩn hóa (Normalized Confusion Matrix)}}{44}{figure.caption.68}%
+\contentsline {figure}{\numberline {5.4}{\ignorespaces Kết quả dự đoán thực tế trên tập Validation (Batch 0)}}{45}{figure.caption.69}%
+\contentsline {figure}{\numberline {5.5}{\ignorespaces Đường cong Loss và Metrics trong quá trình huấn luyện Plate Detection}}{46}{figure.caption.70}%
+\contentsline {figure}{\numberline {5.6}{\ignorespaces Ma trận nhầm lẫn Plate Detection (Normalized)}}{47}{figure.caption.72}%
+\contentsline {figure}{\numberline {5.7}{\ignorespaces Đường cong Loss và Metrics của mô hình tích hợp 6 lớp}}{48}{figure.caption.74}%
+\contentsline {figure}{\numberline {5.8}{\ignorespaces Kết quả inference thực tế Phương pháp 1 (Two-Stage)}}{50}{figure.caption.75}%
+\contentsline {figure}{\numberline {5.9}{\ignorespaces Minh hoạ các phương tiện với tín hiệu đèn giao thông}}{53}{figure.caption.86}%
+\contentsline {figure}{\numberline {5.10}{\ignorespaces Minh hoạ xe vi phạm làn đường}}{54}{figure.caption.87}%
 \addvspace {10\p@ }
