@@ -1,0 +1,586 @@
+\chapter{Hướng dẫn sử dụng ứng dụng}
+\label{ch:huong_dan_su_dung}
+
+Chương này cung cấp hướng dẫn chi tiết cách sử dụng ứng dụng giám sát giao thông và nhận diện biển số xe. Ứng dụng được xây dựng với giao diện PyQt5, cho phép người dùng cấu hình các vùng giám sát, phát hiện vi phạm và nhận diện biển số xe một cách trực quan.
+
+\section{Yêu cầu hệ thống}
+
+\subsection{Phần cứng tối thiểu}
+\begin{itemize}
+    \item \textbf{CPU:} Intel Core i5 hoặc AMD Ryzen 5 (thế hệ 8 trở lên)
+    \item \textbf{RAM:} 8GB (khuyến nghị 16GB)
+    \item \textbf{GPU:} NVIDIA GPU với 4GB VRAM (GTX 1650 trở lên)
+    \item \textbf{Ổ cứng:} 5GB dung lượng trống cho ứng dụng và models
+    \item \textbf{Màn hình:} Độ phân giải tối thiểu 1280×720 (khuyến nghị 1920×1080)
+\end{itemize}
+
+\subsection{Phần mềm}
+\begin{itemize}
+    \item \textbf{Hệ điều hành:} Windows 10/11, Linux (Ubuntu 20.04+), macOS 11+
+    \item \textbf{Python:} Version 3.10 hoặc 3.11
+    \item \textbf{CUDA Toolkit:} 11.8 hoặc 12.1 (nếu sử dụng GPU NVIDIA)
+    \item \textbf{Thư viện:} PyTorch, Ultralytics YOLO, PaddleOCR, PyQt5, OpenCV
+\end{itemize}
+
+\subsection{Cài đặt ứng dụng}
+
+\subsubsection{Bước 1: Cài đặt Python và dependencies}
+\begin{verbatim}
+# Clone repository
+git clone https://github.com/yourusername/Traffic-Vision-AI.git
+cd Traffic-Vision-AI
+
+# Tạo môi trường ảo (khuyến nghị)
+python -m venv venv
+source venv/bin/activate  # Linux/macOS
+venv\Scripts\activate     # Windows
+
+# Cài đặt các thư viện cần thiết
+pip install -r requirements.txt
+\end{verbatim}
+
+\subsubsection{Bước 2: Download models}
+Tải các file trọng số YOLO từ thư mục \texttt{models/yolov8/} hoặc train lại từ dataset.
+
+\subsubsection{Bước 3: Chạy ứng dụng}
+\begin{verbatim}
+cd src
+python integrated_main.py
+\end{verbatim}
+
+\section{Giao diện chính}
+
+Khi khởi động, ứng dụng sẽ yêu cầu chọn video để phân tích. Sau khi chọn video, giao diện chính hiển thị:
+
+\begin{figure}[!htbp]
+    \centering
+    \includegraphics[width=0.95\linewidth]{../Figures/main_interface.png}
+    \caption{Giao diện chính của ứng dụng}
+    \label{fig:main_interface}
+\end{figure}
+
+\subsection{Các thành phần giao diện}
+
+\begin{enumerate}
+    \item \textbf{Menu Bar} (thanh menu): Chứa các menu File, View, Settings, Help
+    \item \textbf{Video Display} (màn hình hiển thị): Hiển thị video với các ROI và bounding boxes
+    \item \textbf{Status Bar} (thanh trạng thái): Hiển thị thông tin trạng thái, FPS, số lượng vi phạm
+\end{enumerate}
+
+\section{Hướng dẫn sử dụng từng tính năng}
+
+\subsection{Chọn và load video}
+
+\subsubsection{Mở video mới}
+\begin{enumerate}
+    \item Vào menu \textbf{File} → \textbf{Open Video...} (hoặc nhấn \texttt{Ctrl+O})
+    \item Chọn file video (hỗ trợ: .mp4, .avi, .mov, .mkv)
+    \item Video sẽ tự động load và phát
+\end{enumerate}
+
+\textbf{Lưu ý:} Khi chuyển video mới, tất cả cấu hình ROI sẽ bị xóa trừ khi đã lưu configuration trước đó.
+
+\subsection{Chọn model detection}
+
+Ứng dụng hỗ trợ nhiều model YOLO với độ chính xác và tốc độ khác nhau.
+
+\subsubsection{Thay đổi model}
+\begin{enumerate}
+    \item Vào menu \textbf{Settings} → \textbf{Model Selection}
+    \item Chọn loại model và file trọng số:
+    \begin{itemize}
+        \item \textbf{vietnam\_vehicle (5 lớp)}: Chỉ phát hiện phương tiện
+        \item \textbf{vietnam\_vehicle\_plate (6 lớp)}: Phát hiện cả xe và biển số (Phương pháp 2)
+        \item \textbf{plate\_only (1 lớp)}: Chỉ phát hiện biển số (dùng cho Phương pháp 1)
+    \end{itemize}
+    \item Model sẽ tự động load vào GPU (nếu có) hoặc CPU
+\end{enumerate}
+
+\subsubsection{Điều chỉnh tham số detection}
+\begin{enumerate}
+    \item Vào menu \textbf{Settings} → \textbf{Detection Parameters}
+    \item \textbf{Set Image Size}: Kích thước ảnh đầu vào (320-1280 pixels)
+    \begin{itemize}
+        \item \textit{Nhỏ hơn (416)}: Nhanh hơn nhưng độ chính xác giảm
+        \item \textit{Lớn hơn (640)}: Chậm hơn nhưng chính xác hơn
+    \end{itemize}
+    \item \textbf{Set Confidence Threshold}: Ngưỡng confidence (0.1-0.9)
+    \begin{itemize}
+        \item \textit{Thấp (0.25)}: Phát hiện nhiều nhưng có thể có false positive
+        \item \textit{Cao (0.5)}: Ít false positive nhưng có thể bỏ sót
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Vẽ và quản lý Direction ROI}
+
+Direction ROI xác định vùng giám sát hướng di chuyển của xe.
+
+\subsubsection{Thêm Direction ROI mới}
+\begin{enumerate}
+    \item Chọn hướng cho phép trong dropdown menu (left, straight, right)
+    \item Nhấn nút \textbf{Draw Direction ROI}
+    \item Click chuột trái trên video để đánh dấu các điểm góc của vùng (tối thiểu 3 điểm)
+    \item Click chuột phải để hoàn thành vùng
+    \item Nhập tên cho ROI trong hộp thoại
+    \item ROI sẽ hiển thị với màu sắc tương ứng:
+    \begin{itemize}
+        \item \textit{Màu xanh lá}: Hướng straight
+        \item \textit{Màu vàng}: Hướng left
+        \item \textit{Màu cam}: Hướng right
+    \end{itemize}
+\end{enumerate}
+
+\textbf{Tips:}
+\begin{itemize}
+    \item Vẽ ROI theo hình dạng làn đường thực tế
+    \item Nên vẽ nhiều ROI nhỏ cho từng làn riêng biệt thay vì 1 ROI lớn
+    \item Tránh vẽ ROI quá gần lề để giảm nhiễu
+\end{itemize}
+
+\subsubsection{Xóa Direction ROI}
+\begin{enumerate}
+    \item Chọn ROI muốn xóa từ danh sách trong menu
+    \item Nhấn nút \textbf{Delete Selected Direction ROI}
+    \item Xác nhận xóa trong hộp thoại
+\end{enumerate}
+
+\subsubsection{Chỉnh sửa Direction ROI}
+\begin{enumerate}
+    \item Chọn ROI muốn chỉnh sửa từ danh sách
+    \item Nhấn nút \textbf{Edit Selected Direction ROI}
+    \item Kéo các điểm góc để điều chỉnh hình dạng
+    \item Nhấn \textbf{Finish Editing} để hoàn tất
+\end{enumerate}
+
+\subsection{Thiết lập Reference Vector}
+
+Reference Vector dùng để hiệu chỉnh phương hướng khi camera bị nghiêng.
+
+\subsubsection{Vẽ Reference Vector}
+\begin{enumerate}
+    \item Nhấn nút \textbf{Set Reference Vector (2 points)}
+    \item Click điểm đầu vector (nên chọn ở đầu làn đường thẳng)
+    \item Click điểm cuối vector (theo hướng xe di chuyển thẳng)
+    \item Vector sẽ hiển thị màu cyan trên video
+    \item Nhấn \textbf{Finish Reference Vector}
+\end{enumerate}
+
+\textbf{Lưu ý quan trọng:}
+\begin{itemize}
+    \item Reference vector \textbf{BẮT BUỘC} phải thiết lập cho detection hướng rẽ trái/phải chính xác
+    \item Vector nên song song với làn đường thẳng
+    \item Độ dài vector không quan trọng, chỉ cần hướng đúng
+\end{itemize}
+
+\subsection{Thêm Traffic Light ROI}
+
+Traffic Light ROI dùng để phát hiện màu đèn giao thông (đỏ/vàng/xanh).
+
+\subsubsection{Thêm đèn giao thông}
+\begin{enumerate}
+    \item Nhấn nút \textbf{Add Traffic Light (Draw ROI)}
+    \item Click góc trên-trái của vùng chứa đèn
+    \item Click góc dưới-phải để hoàn thành vùng chữ nhật
+    \item Chọn loại đèn trong hộp thoại:
+    \begin{itemize}
+        \item \textit{đi thẳng}: Đèn tròn cho làn thẳng
+        \item \textit{tròn}: Đèn tròn chung
+        \item \textit{rẽ trái}: Đèn mũi tên trái
+        \item \textit{rẽ phải}: Đèn mũi tên phải
+    \end{itemize}
+    \item Đèn sẽ được detect tự động bằng HSV color filtering
+\end{enumerate}
+
+\textbf{Tips vẽ TL ROI:}
+\begin{itemize}
+    \item Vùng ROI chỉ bao quanh 1 bóng đèn (đỏ/vàng/xanh), không bao cả khung đèn
+    \item Nên crop sát để tránh nhiễu từ các yếu tố khác
+    \item Nếu đèn không detect được, thử điều chỉnh lại kích thước ROI
+\end{itemize}
+
+\subsubsection{Xóa Traffic Light}
+\begin{enumerate}
+    \item Chọn đèn muốn xóa từ danh sách
+    \item Nhấn nút \textbf{Delete Traffic Light}
+\end{enumerate}
+
+\subsection{Vẽ Lane và phân loại xe}
+
+Lane ROI xác định làn đường và loại xe được phép di chuyển.
+
+\subsubsection{Thêm Lane mới}
+\begin{enumerate}
+    \item Nhấn nút \textbf{Add Lane (Click on video)}
+    \item Click các điểm góc để vẽ polygon làn đường
+    \item Click chuột phải để hoàn thành
+    \item Chọn loại xe được phép trong hộp thoại:
+    \begin{itemize}
+        \item \textit{o to}: Ô tô
+        \item \textit{xe bus}: Xe buýt
+        \item \textit{xe dap}: Xe đạp
+        \item \textit{xe may}: Xe máy
+        \item \textit{xe tai}: Xe tải
+        \item \textit{all}: Tất cả loại xe
+    \end{itemize}
+\end{enumerate}
+
+\textbf{Ví dụ cấu hình:}
+\begin{itemize}
+    \item Làn 1 (trái): Chỉ cho phép xe máy
+    \item Làn 2 (giữa): Cho phép ô tô, xe buýt
+    \item Làn 3 (phải): Cho phép ô tô, xe tải
+\end{itemize}
+
+\subsubsection{Xóa Lane}
+\begin{enumerate}
+    \item Chọn lane từ danh sách
+    \item Nhấn \textbf{Delete Selected Lane}
+\end{enumerate}
+
+\subsection{Vẽ Stop Line}
+
+Stop Line là vạch dừng, dùng để kiểm tra xe có vượt đèn đỏ không.
+
+\subsubsection{Thiết lập Stop Line}
+\begin{enumerate}
+    \item Nhấn nút \textbf{Set Stop Line (Click 2 points)}
+    \item Click điểm đầu vạch dừng
+    \item Click điểm cuối vạch dừng
+    \item Vạch sẽ hiển thị màu đỏ trên video
+\end{enumerate}
+
+\textbf{Lưu ý:}
+\begin{itemize}
+    \item Chỉ có thể thiết lập 1 stop line duy nhất
+    \item Stop line nên đặt vuông góc với hướng xe di chuyển
+    \item Vị trí stop line nên trùng với vạch dừng thực tế trên đường
+\end{itemize}
+
+\subsubsection{Xóa Stop Line}
+Nhấn nút \textbf{Delete Stop Line} để xóa vạch hiện tại.
+
+\subsection{Bật/tắt detection}
+
+\subsubsection{Bật detection}
+\begin{enumerate}
+    \item Sau khi vẽ đủ ROI cần thiết
+    \item Nhấn nút \textbf{Start Detection} (hoặc menu \textbf{Detection} → \textbf{Start})
+    \item Hệ thống bắt đầu phát hiện xe, tracking, và kiểm tra vi phạm
+    \item Các bounding box sẽ hiển thị:
+    \begin{itemize}
+        \item \textit{Màu xanh}: Xe tuân thủ
+        \item \textit{Màu đỏ}: Xe vi phạm
+    \end{itemize}
+\end{enumerate}
+
+\subsubsection{Tắt detection}
+Nhấn nút \textbf{Stop Detection} để tạm dừng (video vẫn phát).
+
+\subsection{Lưu và load cấu hình}
+
+Configuration bao gồm tất cả ROI (Direction, TL, Lane, Stopline, Reference Vector).
+
+\subsubsection{Lưu configuration}
+\begin{enumerate}
+    \item Sau khi vẽ đủ các ROI
+    \item Vào menu \textbf{File} → \textbf{Save Configuration} (hoặc \texttt{Ctrl+S})
+    \item File sẽ lưu tự động với tên: \texttt{<video\_name>\_config.json}
+    \item Vị trí lưu: \texttt{configs/} folder
+\end{enumerate}
+
+\textbf{Format file JSON:}
+\begin{verbatim}
+{
+  "video_path": "path/to/video.mp4",
+  "direction_rois": [...],
+  "traffic_light_rois": [...],
+  "lane_configs": [...],
+  "stop_line": [...],
+  "reference_vector": {...}
+}
+\end{verbatim}
+
+\subsubsection{Load configuration}
+\begin{enumerate}
+    \item Vào menu \textbf{File} → \textbf{Load Configuration} (hoặc \texttt{Ctrl+L})
+    \item Chọn file JSON cấu hình
+    \item Hoặc để auto-load: Đổi tên video, ứng dụng tự động tìm config tương ứng
+\end{enumerate}
+
+\textbf{Auto-load:} Nếu tồn tại file \texttt{<video\_name>\_config.json}, ứng dụng tự động load khi mở video.
+
+\subsection{Các chế độ hiển thị}
+
+\subsubsection{Hiển thị bounding boxes}
+\begin{enumerate}
+    \item Vào menu \textbf{View} → \textbf{Toggle Bounding Boxes}
+    \item Chế độ ON: Hiển thị tất cả xe (xanh + đỏ)
+    \item Chế độ OFF: Chỉ hiển thị xe vi phạm (đỏ)
+\end{enumerate}
+
+\subsubsection{Hiển thị trajectory}
+\begin{enumerate}
+    \item Vào menu \textbf{View} → \textbf{Toggle Violator Trajectory}
+    \item Chế độ ON: Hiển thị quỹ đạo di chuyển của xe vi phạm
+    \item Chế độ OFF: Ẩn trajectory
+\end{enumerate}
+
+\subsection{Chế độ nhận diện biển số}
+
+Ứng dụng hỗ trợ 2 chế độ nhận diện biển số (xem chi tiết Chương 4):
+
+\subsubsection{YOLO Direct Detection (Mặc định)}
+\begin{itemize}
+    \item Sử dụng: Menu \textbf{Settings} → \textbf{License Plate Tracking} → \textbf{YOLO Direct Detection}
+    \item Đặc điểm:
+    \begin{itemize}
+        \item Model phát hiện biển số trực tiếp từ YOLO mỗi frame
+        \item Độ chính xác cao (mAP@50: 99.5\% với Phương pháp 1)
+        \item Phù hợp cho camera có độ phân giải tốt
+    \end{itemize}
+\end{itemize}
+
+\subsubsection{Relative Position Tracking}
+\begin{itemize}
+    \item Sử dụng: Menu \textbf{Settings} → \textbf{License Plate Tracking} → \textbf{Relative Position Tracking}
+    \item Đặc điểm:
+    \begin{itemize}
+        \item Lưu vị trí tương đối của biển so với xe
+        \item Tự động estimate vị trí biển ở các frame sau
+        \item Giảm số lần chạy OCR, tiết kiệm tài nguyên
+        \item Update lại sau mỗi 30 frames
+    \end{itemize}
+\end{itemize}
+
+\subsection{Thông tin trạng thái}
+
+\subsubsection{Status Bar}
+Hiển thị thông tin real-time:
+\begin{itemize}
+    \item \textbf{FPS}: Số khung hình/giây (Display FPS và Detection FPS)
+    \item \textbf{Violations}: Tổng số vi phạm (đèn đỏ, sai làn, sai hướng)
+    \item \textbf{Vehicles}: Số xe máy và ô tô đã qua
+    \item \textbf{Device}: GPU hoặc CPU đang sử dụng
+\end{itemize}
+
+\subsubsection{On-screen panel}
+Panel bán trong suốt góc trên-trái video hiển thị:
+\begin{itemize}
+    \item Render FPS
+    \item Detection FPS
+    \item Số xe vi phạm (Red Light, Lane, Direction)
+    \item Số xe máy và ô tô đã qua
+\end{itemize}
+
+\subsection{Các thao tác nâng cao}
+
+\subsubsection{Context menu (Click chuột phải)}
+Click chuột phải trên video để hiện menu:
+\begin{itemize}
+    \item \textbf{Add Direction ROI}: Vẽ Direction ROI nhanh
+    \item \textbf{Add Traffic Light}: Vẽ TL ROI nhanh
+    \item \textbf{Add Lane}: Vẽ Lane nhanh
+    \item \textbf{Set Stop Line}: Vẽ stop line nhanh
+    \item \textbf{Toggle ROI Display}: Ẩn/hiện tất cả ROI
+\end{itemize}
+
+\subsubsection{Phím tắt}
+\begin{table}[!ht]
+\centering
+\caption{Bảng phím tắt}
+\label{tab:shortcuts}
+\begin{tabular}{|l|l|}
+\hline
+\textbf{Phím tắt} & \textbf{Chức năng} \\ \hline
+Ctrl+O & Mở video mới \\ \hline
+Ctrl+S & Lưu configuration \\ \hline
+Ctrl+L & Load configuration \\ \hline
+Ctrl+D & Start/Stop detection \\ \hline
+Ctrl+B & Toggle bounding boxes \\ \hline
+Ctrl+T & Toggle trajectory \\ \hline
+Ctrl+R & Toggle ROI display \\ \hline
+Space & Pause/Resume video \\ \hline
+\end{tabular}
+\end{table}
+
+\section{Xử lý sự cố thường gặp}
+
+\subsection{Lỗi model không load được}
+
+\textbf{Triệu chứng:} Hiển thị lỗi "Model not loaded" hoặc "Failed to load model"
+
+\textbf{Giải quyết:}
+\begin{enumerate}
+    \item Kiểm tra file trọng số có tồn tại trong \texttt{models/yolov8/}
+    \item Kiểm tra CUDA có cài đặt đúng version: \texttt{nvidia-smi}
+    \item Thử chuyển sang CPU mode: Menu \textbf{Settings} → \textbf{Device} → \textbf{CPU}
+    \item Kiểm tra version PyTorch tương thích với CUDA
+\end{enumerate}
+
+\subsection{FPS thấp}
+
+\textbf{Triệu chứng:} Detection FPS < 5 hoặc video giật
+
+\textbf{Giải quyết:}
+\begin{enumerate}
+    \item Giảm image size xuống 416 hoặc 320
+    \item Chuyển sang model nhẹ hơn (YOLOv8n thay vì YOLOv8s)
+    \item Bật GPU mode nếu đang dùng CPU
+    \item Đóng các ứng dụng nặng khác
+    \item Giảm số lượng ROI nếu quá nhiều
+\end{enumerate}
+
+\subsection{OCR không nhận diện được biển số}
+
+\textbf{Triệu chứng:} Không có text biển số hiển thị hoặc text sai
+
+\textbf{Giải quyết:}
+\begin{enumerate}
+    \item Kiểm tra PaddleOCR đã cài đặt: \texttt{pip list | grep paddleocr}
+    \item Kiểm tra plate detection có hoạt động không (bbox màu xanh lá trên biển)
+    \item Tăng độ phân giải video hoặc camera
+    \item Đảm bảo biển số không bị mờ hoặc nghiêng quá 45 độ
+    \item Thử chuyển sang Phương pháp 1 (Two-Stage) cho độ chính xác cao hơn
+\end{enumerate}
+
+\subsection{Phát hiện vi phạm sai}
+
+\textbf{Triệu chứng:} Xe không vi phạm nhưng bị bắt hoặc ngược lại
+
+\textbf{Giải quyết:}
+\begin{enumerate}
+    \item \textbf{Vi phạm đèn đỏ sai:}
+    \begin{itemize}
+        \item Kiểm tra TL ROI có vẽ đúng không (chỉ bao 1 bóng đèn)
+        \item Kiểm tra stop line có đặt đúng vị trí
+        \item Điều chỉnh confidence threshold (menu Settings)
+    \end{itemize}
+    \item \textbf{Vi phạm làn sai:}
+    \begin{itemize}
+        \item Vẽ lại lane ROI sát làn đường hơn
+        \item Kiểm tra loại xe allowed trong lane config
+    \end{itemize}
+    \item \textbf{Vi phạm hướng sai:}
+    \begin{itemize}
+        \item Kiểm tra Reference Vector đã vẽ chưa (BẮT BUỘC)
+        \item Reference vector phải song song với làn thẳng
+        \item Direction ROI phải cover đúng vùng xe đi qua
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Video không phát}
+
+\textbf{Triệu chứng:} Video không load hoặc màn hình đen
+
+\textbf{Giải quyết:}
+\begin{enumerate}
+    \item Kiểm tra codec video: Sử dụng H.264 hoặc H.265
+    \item Thử chuyển đổi video sang định dạng .mp4
+    \item Kiểm tra OpenCV đã cài đặt đầy đủ: \texttt{pip install opencv-python}
+    \item Kiểm tra đường dẫn video không có ký tự đặc biệt
+\end{enumerate}
+
+\section{Tips và thủ thuật}
+
+\subsection{Tăng độ chính xác}
+
+\begin{enumerate}
+    \item \textbf{Sử dụng camera chất lượng cao:}
+    \begin{itemize}
+        \item Độ phân giải tối thiểu 1920×1080 (Full HD)
+        \item FPS >= 25 để tracking ổn định
+        \item Góc nhìn từ trên xuống 30-45 độ
+    \end{itemize}
+    
+    \item \textbf{Vẽ ROI chính xác:}
+    \begin{itemize}
+        \item Vẽ Direction ROI sát làn đường
+        \item TL ROI chỉ bao 1 bóng đèn duy nhất
+        \item Stop line đặt vuông góc với hướng xe
+    \end{itemize}
+    
+    \item \textbf{Cấu hình model phù hợp:}
+    \begin{itemize}
+        \item Dùng Phương pháp 1 (Two-Stage) cho độ chính xác cao
+        \item Dùng Phương pháp 2 (One-Stage) cho tốc độ nhanh
+        \item Image size 640 cho biển số xa hoặc nhỏ
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Tối ưu hiệu năng}
+
+\begin{enumerate}
+    \item \textbf{Sử dụng GPU:}
+    \begin{itemize}
+        \item Menu Settings → Device → GPU (CUDA)
+        \item Kiểm tra CUDA Toolkit và cuDNN đã cài
+        \item Đảm bảo PyTorch build với CUDA support
+    \end{itemize}
+    
+    \item \textbf{Giảm overhead:}
+    \begin{itemize}
+        \item Tắt hiển thị trajectory nếu không cần (Ctrl+T)
+        \item Chỉ hiển thị violator boxes (Toggle Bounding Boxes OFF)
+        \item Giảm số lượng ROI xuống mức tối thiểu
+    \end{itemize}
+    
+    \item \textbf{Batch processing:}
+    \begin{itemize}
+        \item Xử lý nhiều video cùng lúc: Sử dụng script batch
+        \item Lưu configuration cho từng camera để load nhanh
+    \end{itemize}
+\end{enumerate}
+
+\subsection{Workflow khuyến nghị}
+
+\begin{enumerate}
+    \item \textbf{Chuẩn bị:}
+    \begin{itemize}
+        \item Chọn video test với điều kiện đại diện
+        \item Load model phù hợp (vehicle + plate)
+        \item Kiểm tra FPS có đủ real-time không
+    \end{itemize}
+    
+    \item \textbf{Vẽ ROI theo thứ tự:}
+    \begin{enumerate}
+        \item Reference Vector (nếu camera nghiêng)
+        \item Direction ROI (cho từng làn)
+        \item Traffic Light ROI (nếu có)
+        \item Lane ROI (cho vi phạm làn)
+        \item Stop Line (cho vi phạm đèn đỏ)
+    \end{enumerate}
+    
+    \item \textbf{Test và tinh chỉnh:}
+    \begin{itemize}
+        \item Start detection và quan sát vài phút
+        \item Kiểm tra false positive/negative
+        \item Điều chỉnh ROI nếu cần
+        \item Save configuration khi hài lòng
+    \end{itemize}
+    
+    \item \textbf{Deploy:}
+    \begin{itemize}
+        \item Load configuration cho video thật
+        \item Monitor thống kê vi phạm
+        \item Export kết quả nếu cần
+    \end{itemize}
+\end{enumerate}
+
+\section{Kết luận}
+
+Ứng dụng giám sát giao thông cung cấp giao diện trực quan và dễ sử dụng cho việc phát hiện vi phạm giao thông và nhận diện biển số xe. Với hướng dẫn chi tiết trong chương này, người dùng có thể:
+
+\begin{itemize}
+    \item Cài đặt và chạy ứng dụng thành công
+    \item Cấu hình các vùng giám sát (ROI) chính xác
+    \item Sử dụng các tính năng detection và tracking
+    \item Xử lý các lỗi thường gặp
+    \item Tối ưu hiệu năng cho hệ thống của mình
+\end{itemize}
+
+Để được hỗ trợ thêm, vui lòng tham khảo:
+\begin{itemize}
+    \item README.md trong repository
+    \item Issues trên GitHub
+    \item Email: support@traffic-vision-ai.com
+\end{itemize}

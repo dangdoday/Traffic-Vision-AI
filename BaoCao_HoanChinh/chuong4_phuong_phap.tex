@@ -9,51 +9,91 @@ Hệ thống được thiết kế theo mô hình xử lý đa luồng sử dụ
 
 \begin{figure}[!htbp]
 \centering
-\begin{tikzpicture}[node distance=1.5cm]
-    % Nodes
-    \node (input) [startstop] {Video Input / Camera};
+\begin{tikzpicture}[
+    node distance=1.2cm,
+    box/.style={rectangle, draw, rounded corners, minimum width=2.5cm, minimum height=0.8cm, align=center, font=\small},
+    decision/.style={diamond, draw, minimum width=2cm, minimum height=1cm, align=center, font=\small},
+    arrow/.style={->, thick, >=stealth}
+]
+    % Input
+    \node[box, fill=blue!20] (input) {Video Frame};
     
-    % Nhanh 1: Xe va Tracking
-    \node (yolo) [process, below of=input] {YOLOv8 Detect \& ByteTrack};
-    \node (tracker) [process, below of=yolo] {Vehicle Tracker (Pos History)};
+    % YOLO Detection & Tracking
+    \node[box, fill=orange!20, below=0.8cm of input] (yolo) {YOLOv8\\Detect};
+    \node[box, fill=yellow!20, below=0.8cm of yolo] (track) {ByteTrack\\Tracking};
     
-    % Nhanh 2: Tinh Huong (Phuc tap hon)
-    \node (traj) [process, below of=tracker, xshift=-2.5cm] {Trajectory Analysis (Ref Vector)};
-    \node (roi_dir) [process, below of=tracker, xshift=2.5cm] {ROI-based Direction};
-    \node (fusion) [decision, below of=tracker, yshift=-2.5cm] {Direction Fusion};
+    % Split into 3 branches
+    \node[box, fill=green!20, below left=1.2cm and 2cm of track] (veh_tracker) {Vehicle\\Tracker};
+    \node[box, fill=cyan!20, below=1.2cm of track] (tl_manager) {Traffic Light\\Manager};
+    \node[box, fill=pink!20, below right=1.2cm and 2cm of track] (alpr) {ALPR\\Pipeline};
     
-    % Nhanh 3: Den tin hieu
-    \node (tl_man) [process, right of=yolo, xshift=5cm] {TL Manager (ROI \& HSV)};
+    % Vehicle Tracker sub-branches
+    \node[box, fill=green!30, below left=1cm and 0.8cm of veh_tracker] (traj) {Trajectory\\Analyzer};
+    \node[box, fill=green!30, below right=1cm and 0.8cm of veh_tracker] (roi_dir) {ROI\\Direction};
+    \node[decision, fill=green!40, below=2cm of veh_tracker] (fusion) {Direction\\Fusion};
     
-    % Logic Vi pham
-    \node (stopline) [process, right of=fusion, xshift=3cm] {Stopline Manager};
-    \node (engine) [process, below of=fusion, yshift=-1cm] {Violation Engine};
+    % ALPR sub-pipeline
+    \node[box, fill=pink!30, below=0.8cm of alpr] (ocr) {PaddleOCR};
+    \node[box, fill=pink!30, below=0.8cm of ocr] (validate) {Validation\\& Retry};
     
-    % ALPR Branch
-    \node (alpr) [process, left of=engine, xshift=-3cm] {ALPR Pipeline};
+    % Violation Detection
+    \node[box, fill=red!20, below=3cm of track] (stopline) {Stopline\\Manager};
+    \node[box, fill=red!30, below=1.5cm of stopline] (violation) {Violation\\Engine};
     
-    \node (output) [startstop, below of=engine] {Cảnh báo \& Thống kê};
-
-    % Arrows
-    \draw [arrow] (input) -- (yolo);
-    \draw [arrow] (yolo) -- (tracker);
-    \draw [arrow] (tracker) -- (traj);
-    \draw [arrow] (tracker) -- (roi_dir);
-    \draw [arrow] (traj) |- (fusion);
-    \draw [arrow] (roi_dir) |- (fusion);
+    % Output
+    \node[box, fill=purple!20, below=0.8cm of violation] (output) {Alert \&\\Statistics};
     
-    \draw [arrow] (input) -| (tl_man);
-    \draw [arrow] (tl_man) |- (engine);
+    % Main flow arrows
+    \draw[arrow] (input) -- (yolo);
+    \draw[arrow] (yolo) -- (track);
     
-    \draw [arrow] (fusion) -- (engine);
-    \draw [arrow] (stopline) -- (engine);
-    \draw [arrow] (tracker) -| (alpr);
-    \draw [arrow] (alpr) |- (output);
-    \draw [arrow] (engine) -- (output);
+    % Branch to 3 modules
+    \draw[arrow] (track) -- (veh_tracker);
+    \draw[arrow] (track) -- (tl_manager);
+    \draw[arrow] (track) -- (alpr);
+    
+    % Vehicle Tracker internal flow
+    \draw[arrow] (veh_tracker) -- (traj);
+    \draw[arrow] (veh_tracker) -- (roi_dir);
+    \draw[arrow] (traj) |- (fusion);
+    \draw[arrow] (roi_dir) |- (fusion);
+    
+    % ALPR flow
+    \draw[arrow] (alpr) -- (ocr);
+    \draw[arrow] (ocr) -- (validate);
+    
+    % To Violation Engine
+    \draw[arrow] (fusion) |- (violation);
+    \draw[arrow] (tl_manager) -| (violation);
+    \draw[arrow] (stopline) -- (violation);
+    \draw[arrow] (validate) |- (violation);
+    
+    % Output
+    \draw[arrow] (violation) -- (output);
 \end{tikzpicture}
 \caption{Sơ đồ luồng xử lý chi tiết với cơ chế Direction Fusion và ALPR}
 \label{fig:system_pipeline}
 \end{figure}
+
+\textbf{Giải thích các module chính:}
+\begin{itemize}
+    \item \textbf{YOLOv8 Detect:} Phát hiện phương tiện và biển số (tùy phương pháp 1 hoặc 2)
+    \item \textbf{ByteTrack Tracking:} Gán ID duy nhất và theo dõi xe qua các frame
+    \item \textbf{Vehicle Tracker:} Lưu lịch sử vị trí xe (position history) để phân tích hướng
+    \begin{itemize}
+        \item \textit{Trajectory Analyzer:} Tính hướng dựa trên lịch sử di chuyển và reference vector
+        \item \textit{ROI Direction:} Tính hướng dựa trên vị trí xe trong ROI
+        \item \textit{Direction Fusion:} Kết hợp 2 phương pháp để ra hướng cuối cùng (8 hướng)
+    \end{itemize}
+    \item \textbf{Traffic Light Manager:} Phát hiện màu đèn giao thông (HSV color filtering trong ROI)
+    \item \textbf{ALPR Pipeline:} Nhận diện biển số
+    \begin{itemize}
+        \item \textit{PaddleOCR:} Đọc ký tự từ ảnh biển số (sau tiền xử lý CLAHE)
+        \item \textit{Validation \& Retry:} Kiểm tra định dạng biển số Việt Nam, retry nếu sai
+    \end{itemize}
+    \item \textbf{Stopline Manager:} Kiểm tra xe có vượt qua vạch dừng hay không
+    \item \textbf{Violation Engine:} Logic tổng hợp kiểm tra vi phạm (đèn đỏ + stopline, sai làn, sai hướng)
+\end{itemize}
 
 %============================================================
 % PHẦN 1: CHUẨN BỊ DỮ LIỆU PHƯƠNG TIỆN
