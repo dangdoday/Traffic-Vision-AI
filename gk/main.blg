@@ -1,0 +1,58 @@
+This is BibTeX, Version 0.99e
+Capacity: max_strings=200000, hash_size=200000, hash_prime=170003
+The top-level auxiliary file: main.aux
+Reallocating 'name_of_file' (item size: 1) to 15 items.
+A level-1 auxiliary file: loi_cam_on.aux
+Reallocating 'name_of_file' (item size: 1) to 12 items.
+A level-1 auxiliary file: tom_tat.aux
+Reallocating 'name_of_file' (item size: 1) to 19 items.
+A level-1 auxiliary file: chuong1_mo_dau.aux
+Reallocating 'name_of_file' (item size: 1) to 32 items.
+A level-1 auxiliary file: chuong2_ly_thuyet_phat_hien.aux
+Reallocating 'name_of_file' (item size: 1) to 27 items.
+A level-1 auxiliary file: chuong3_ly_thuyet_alpr.aux
+Reallocating 'name_of_file' (item size: 1) to 9 items.
+The style file: plainnat.bst
+Reallocating 'name_of_file' (item size: 1) to 11 items.
+Database file #1: references.bib
+You've used 27 entries,
+            2773 wiz_defined-function locations,
+            747 strings with 10040 characters,
+and the built_in function-call counts, 16146 in all, are:
+= -- 1397
+> -- 1177
+< -- 18
++ -- 396
+- -- 369
+* -- 1346
+:= -- 2437
+add.period$ -- 86
+call.type$ -- 27
+change.case$ -- 203
+chr.to.int$ -- 27
+cite$ -- 54
+duplicate$ -- 668
+empty$ -- 1152
+format.name$ -- 400
+if$ -- 3412
+int.to.chr$ -- 1
+int.to.str$ -- 1
+missing$ -- 23
+newline$ -- 144
+num.names$ -- 108
+pop$ -- 442
+preamble$ -- 1
+purify$ -- 176
+quote$ -- 0
+skip$ -- 591
+stack$ -- 0
+substring$ -- 566
+swap$ -- 137
+text.length$ -- 11
+text.prefix$ -- 0
+top$ -- 0
+type$ -- 297
+warning$ -- 0
+while$ -- 125
+width$ -- 0
+write$ -- 354

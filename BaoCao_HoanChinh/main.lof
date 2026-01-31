@@ -1,0 +1,41 @@
+\babel@toc {vietnamese}{}\relax 
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {2.1}{\ignorespaces Cơ chế chia lưới và biểu diễn đầu ra của YOLO}}{7}{figure.caption.6}%
+\contentsline {figure}{\numberline {2.2}{\ignorespaces Chu trình hoạt động của Bộ lọc Kalman}}{12}{figure.caption.15}%
+\contentsline {figure}{\numberline {2.3}{\ignorespaces Minh họa quy trình liên kết hai giai đoạn của ByteTrack}}{14}{figure.caption.18}%
+\contentsline {figure}{\numberline {2.4}{\ignorespaces So sánh góc chuyển động $\vec v$ với góc tham chiếu $\vec r$ (ngưỡng $50^\circ $). Vùng màu xanh lá: đi thẳng, vùng ngoài: rẽ trái/phải.}}{17}{figure.caption.24}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Pipeline tổng quan của hệ thống ALPR}}{18}{figure.caption.25}%
+\contentsline {figure}{\numberline {3.2}{\ignorespaces Kiến trúc CRNN cho OCR trong PaddleOCR}}{19}{figure.caption.27}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {4.1}{\ignorespaces Sơ đồ luồng xử lý chi tiết với cơ chế Direction Fusion và ALPR}}{26}{figure.caption.43}%
+\contentsline {figure}{\numberline {4.2}{\ignorespaces Phân bố số lượng nhãn và vị trí không gian của các đối tượng}}{28}{figure.caption.46}%
+\contentsline {figure}{\numberline {4.3}{\ignorespaces Pipeline xử lý nhận diện biển số xe}}{33}{figure.caption.51}%
+\contentsline {figure}{\numberline {4.4}{\ignorespaces Pipeline Phương pháp 2: Phát hiện đồng thời xe và biển số trong một mô hình}}{35}{figure.caption.56}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {5.1}{\ignorespaces Dữ liệu huấn luyện sau khi áp dụng Mosaic Augmentation}}{40}{figure.caption.62}%
+\contentsline {figure}{\numberline {5.2}{\ignorespaces Đồ thị Loss và mAP trong quá trình huấn luyện phát hiện phương tiện}}{41}{figure.caption.63}%
+\contentsline {figure}{\numberline {5.3}{\ignorespaces Ma trận nhầm lẫn chuẩn hóa (Normalized Confusion Matrix)}}{42}{figure.caption.67}%
+\contentsline {figure}{\numberline {5.4}{\ignorespaces Đường cong Precision-Recall của Model 1 (Phát hiện phương tiện)}}{43}{figure.caption.68}%
+\contentsline {figure}{\numberline {5.5}{\ignorespaces Kết quả dự đoán trên tập Validation - Model 1 (Phát hiện phương tiện)}}{43}{figure.caption.69}%
+\contentsline {figure}{\numberline {5.6}{\ignorespaces Đường cong Loss và Metrics trong quá trình huấn luyện Plate Detection}}{44}{figure.caption.70}%
+\contentsline {figure}{\numberline {5.7}{\ignorespaces Ma trận nhầm lẫn Plate Detection (Normalized)}}{45}{figure.caption.72}%
+\contentsline {figure}{\numberline {5.8}{\ignorespaces Đường cong Precision-Recall của Model 2 (Phát hiện biển số)}}{46}{figure.caption.73}%
+\contentsline {figure}{\numberline {5.9}{\ignorespaces Kết quả dự đoán trên tập Validation - Model 2 (Phát hiện biển số)}}{46}{figure.caption.74}%
+\contentsline {figure}{\numberline {5.10}{\ignorespaces Đường cong Loss và Metrics của mô hình tích hợp 6 lớp}}{48}{figure.caption.77}%
+\contentsline {figure}{\numberline {5.11}{\ignorespaces Ma trận nhầm lẫn của mô hình tích hợp 6 lớp (Normalized)}}{48}{figure.caption.78}%
+\contentsline {figure}{\numberline {5.12}{\ignorespaces Đường cong Precision-Recall của mô hình tích hợp 6 lớp}}{49}{figure.caption.79}%
+\contentsline {figure}{\numberline {5.13}{\ignorespaces Kết quả dự đoán trên tập Validation - Mô hình tích hợp 6 lớp (Pipeline 2)}}{49}{figure.caption.80}%
+\contentsline {figure}{\numberline {5.14}{\ignorespaces Kết quả inference thực tế Phương pháp 1 (Two-Stage)}}{50}{figure.caption.81}%
+\contentsline {figure}{\numberline {5.15}{\ignorespaces Kết quả Inference thực tế của Phương pháp 2 (One-Stage: Model tích hợp 6 lớp)}}{52}{figure.caption.89}%
+\contentsline {figure}{\numberline {5.16}{\ignorespaces Tổng hợp đường cong Loss và Metrics của các model trong hệ thống}}{53}{figure.caption.91}%
+\contentsline {figure}{\numberline {5.17}{\ignorespaces Tổng hợp ma trận nhầm lẫn của các model trong hệ thống}}{54}{figure.caption.92}%
+\contentsline {figure}{\numberline {5.18}{\ignorespaces Tổng hợp kết quả Validation của các model trong hệ thống}}{55}{figure.caption.93}%
+\contentsline {figure}{\numberline {5.19}{\ignorespaces Pipeline 1 (Two-Stage): Phát hiện chính xác biển số nhỏ/xa}}{56}{figure.caption.97}%
+\contentsline {figure}{\numberline {5.20}{\ignorespaces Pipeline 1 (Two-Stage): OCR chính xác với biển số rõ nét}}{56}{figure.caption.98}%
+\contentsline {figure}{\numberline {5.21}{\ignorespaces Pipeline 1 (Two-Stage): Xử lý tốt nhiều xe trong frame}}{57}{figure.caption.99}%
+\contentsline {figure}{\numberline {5.22}{\ignorespaces Minh hoạ các phương tiện với tín hiệu đèn giao thông}}{59}{figure.caption.105}%
+\contentsline {figure}{\numberline {5.23}{\ignorespaces Minh hoạ xe vi phạm làn đường}}{60}{figure.caption.106}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }

@@ -1,0 +1,150 @@
+﻿\documentclass[a4paper, twoside, 12pt]{report}
+
+%% ============= PACKAGES =============
+% Language and font encodings
+\usepackage[utf8]{inputenc}
+\usepackage[vietnamese]{babel}
+\usepackage[utf8]{vietnam}
+
+% Math packages
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{mathtools}
+
+% Graphics and figures
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{tikz}
+\usetikzlibrary{shapes.geometric, arrows.meta, positioning, calc}
+
+% Tables
+\usepackage{booktabs}
+\usepackage{multirow}
+\usepackage{rotating}
+
+% Algorithms
+\usepackage[linesnumbered,ruled,vlined]{algorithm2e}
+\usepackage{algpseudocode}
+
+% Miscellaneous
+\usepackage{float}
+\usepackage{enumitem}  % For list spacing control
+
+% List spacing configuration
+\setlist{nosep, itemsep=2pt, parsep=2pt, topsep=4pt}
+\setlist[itemize]{itemsep=2pt, parsep=2pt, topsep=4pt}
+\setlist[enumerate]{itemsep=2pt, parsep=2pt, topsep=4pt}
+\usepackage{indentfirst}
+\usepackage{textcomp}
+\usepackage{acronym}
+\usepackage{etoolbox}
+\usepackage{lipsum}
+
+% Bibliography
+\usepackage[super,numbers]{natbib}
+\bibpunct{[}{]}{,}{s}{}{}
+
+% Theorems
+\newtheorem{definition}{Định nghĩa}[chapter]
+\newtheorem{theorem}{Định lý}[chapter]
+
+% TikZ styles
+\tikzstyle{startstop} = [rectangle, rounded corners, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=gray!20]
+\tikzstyle{process} = [rectangle, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=blue!15]
+\tikzstyle{decision} = [diamond, minimum width=3cm, minimum height=1cm, text centered, draw=black, fill=yellow!20]
+\tikzstyle{arrow} = [thick,->,>=stealth]
+
+% Page layout
+\usepackage[a4paper,top=2.8cm,bottom=2.8cm,left=3cm,right=3cm,marginparwidth=1.75cm]{geometry}
+
+% Title formatting
+\usepackage[compact]{titlesec}
+\titlespacing{\section}{0pt}{2ex}{1ex}
+\titlespacing{\subsection}{0pt}{1.5ex}{0.5ex}
+\titlespacing{\subsubsection}{0pt}{1ex}{0.5ex}
+
+\titleformat{\section}
+  {\normalfont\fontsize{18}{22}\bfseries}{\thesection}{1em}{}
+
+% Hyperlinks (MUST BE LAST)
+\usepackage[colorlinks=true, 
+            linkcolor=black,
+            citecolor=blue,
+            urlcolor=blue,
+            pdftitle={Hệ thống giám sát giao thông thông minh và nhận diện biển số xe Việt Nam},
+            pdfauthor={Nguyễn Hải Đăng, Chử Văn Hiệp, Nguyễn Mậu Đức},
+            pdfsubject={Advanced reading on Computer Vision},
+            pdfkeywords={YOLO, Traffic Monitoring, Violation Detection, ByteTrack, License Plate Recognition, PaddleOCR}]{hyperref}
+
+% Line Numbering on the left side (cho bản nháp - có thể xóa khi in)
+\usepackage[left]{lineno}
+
+%% ============= DOCUMENT CONTENT =============
+
+\begin{document}
+
+% ============= FRONT MATTER =============
+\pagenumbering{roman}
+
+\input{title.tex} % Trang bìa
+
+\include{loi_cam_on} % Lời cảm ơn
+\include{tom_tat} % Tóm tắt
+
+\tableofcontents % Mục lục
+\listoffigures % Danh sách hình
+\listoftables % Danh sách bảng
+
+% Danh sách các từ viết tắt
+\chapter*{Danh sách các từ viết tắt}
+\addcontentsline{toc}{chapter}{Danh sách các từ viết tắt}
+
+\begin{acronym}[CLAHE]
+  \acro{AI}{Artificial Intelligence (Trí tuệ nhân tạo)}
+  \acro{ALPR}{Automatic License Plate Recognition (Nhận dạng biển số tự động)}
+  \acro{CLAHE}{Contrast Limited Adaptive Histogram Equalization}
+  \acro{CNN}{Convolutional Neural Network (Mạng nơ-ron tích chập)}
+  \acro{CPU}{Central Processing Unit (Bộ xử lý trung tâm)}
+  \acro{CRNN}{Convolutional Recurrent Neural Network}
+  \acro{CTC}{Connectionist Temporal Classification}
+  \acro{CIoU}{Complete Intersection over Union (Hàm mất mát định vị)}
+  \acro{DFL}{Distribution Focal Loss}
+  \acro{EMA}{Exponential Moving Average}
+  \acro{FN}{False Negative (Âm tính giả - Bỏ sót đối tượng)}
+  \acro{FP}{False Positive (Dương tính giả - Bắt nhầm đối tượng)}
+  \acro{FPS}{Frames Per Second (Số khung hình trên giây)}
+  \acro{GPU}{Graphics Processing Unit (Bộ xử lý đồ họa)}
+  \acro{HSV}{Hue, Saturation, Value (Không gian màu)}
+  \acro{IoU}{Intersection over Union (Chỉ số Giao trên Hợp)}
+  \acro{LSTM}{Long Short-Term Memory}
+  \acro{mAP}{mean Average Precision (Độ chính xác trung bình)}
+  \acro{MOT}{Multi-Object Tracking (Theo dõi đa đối tượng)}
+  \acro{OCR}{Optical Character Recognition (Nhận dạng ký tự quang học)}
+  \acro{R-CNN}{Region-based Convolutional Neural Network}
+  \acro{RGB}{Red, Green, Blue (Không gian màu đỏ-lục-lam)}
+  \acro{ROI}{Region of Interest (Vùng quan tâm)}
+  \acro{TP}{True Positive (Dương tính thật - Dự đoán đúng)}
+  \acro{VFL}{Varifocal Loss}
+  \acro{VNLP}{Vietnamese License Plate (Biển số xe Việt Nam)}
+  \acro{YOLO}{You Only Look Once (Mô hình phát hiện đối tượng)}
+\end{acronym}
+
+\clearpage
+
+% ============= MAIN CONTENT =============
+\pagenumbering{arabic}
+
+\include{chuong1_mo_dau}
+\include{chuong2_ly_thuyet_phat_hien}
+\include{chuong3_ly_thuyet_alpr}
+\include{chuong4_phuong_phap}
+\include{chuong5_thuc_nghiem}
+\include{chuong6_ket_luan}
+\include{chuong7_huong_dan_su_dung}
+
+% ============= BIBLIOGRAPHY =============
+\bibliographystyle{plainnat}
+\bibliography{references}
+\nocite{*}
+
+\end{document}

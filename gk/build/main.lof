@@ -1,0 +1,10 @@
+\babel@toc {vietnamese}{}\relax 
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {2.1}{\ignorespaces Cơ chế chia lưới và biểu diễn đầu ra của YOLO}}{7}{figure.caption.7}%
+\contentsline {figure}{\numberline {2.2}{\ignorespaces Chu trình hoạt động của Bộ lọc Kalman}}{12}{figure.caption.16}%
+\contentsline {figure}{\numberline {2.3}{\ignorespaces Minh họa quy trình liên kết hai giai đoạn của ByteTrack}}{14}{figure.caption.19}%
+\contentsline {figure}{\numberline {2.4}{\ignorespaces So sánh góc chuyển động $\vec v$ với góc tham chiếu $\vec r$ (ngưỡng $50^\circ $). Vùng màu xanh lá: đi thẳng, vùng ngoài: rẽ trái/phải.}}{17}{figure.caption.25}%
+\addvspace {10\p@ }
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Pipeline tổng quan của hệ thống ALPR}}{18}{figure.caption.26}%
+\contentsline {figure}{\numberline {3.2}{\ignorespaces Kiến trúc CRNN cho OCR trong PaddleOCR}}{19}{figure.caption.28}%
