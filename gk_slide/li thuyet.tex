@@ -163,3 +163,237 @@
         \end{itemize}
     \end{block}
 \end{frame}
+%----------------------------------------------------------------------------------------
+%   PHẦN 3: NHẬN DIỆN BIỂN SỐ XE (ALPR)
+%----------------------------------------------------------------------------------------
+\section{Cơ sở lý thuyết: Nhận diện biển số xe}
+
+\begin{frame}{Tổng quan về ALPR}
+    \begin{columns}[c]
+    \begin{column}{0.55\textwidth}
+        \textbf{ALPR} (Automatic License Plate Recognition) gồm 2 giai đoạn:
+        \begin{enumerate}
+            \item \textbf{Plate Detection:} Xác định vị trí biển số trong ảnh
+            \item \textbf{Character Recognition (OCR):} Nhận dạng các ký tự
+        \end{enumerate}
+        
+        \vspace{0.3em}
+        \textbf{Thách thức với biển số Việt Nam:}
+        \begin{itemize}
+            \item Đa dạng định dạng (1 dòng, 2 dòng)
+            \item Biển số bị nghiêng, mờ, bẩn
+            \item Điều kiện ánh sáng thay đổi
+        \end{itemize}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{Figures/plate_inference1.png}
+        
+        \tiny Kết quả phát hiện biển số
+    \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{PaddleOCR - Giới thiệu}
+    \textbf{PaddleOCR 2.7.x (PP-OCRv4)} - Công cụ OCR mã nguồn mở của Baidu
+    
+    \begin{block}{Đặc điểm chính}
+    \begin{itemize}
+        \item Hỗ trợ \textbf{80+ ngôn ngữ}
+        \item Độ chính xác cao, tốc độ nhanh (real-time)
+        \item Kiến trúc nhẹ: \textbf{SVTR\_LCNet} (~12MB model)
+    \end{itemize}
+    \end{block}
+    
+    \vspace{0.5em}
+    \textbf{Cấu hình trong dự án:}
+    \begin{itemize}
+        \item \texttt{use\_textline\_orientation=True}: Tự động xoay văn bản nghiêng
+        \item \texttt{lang='en'}: Bộ ký tự Latin (A-Z, 0-9)
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Pipeline nhận dạng trong PaddleOCR}
+    \begin{block}{Luồng xử lý}
+    \centering
+    \small
+    \textbf{Ảnh biển số} $\rightarrow$ \textbf{Rectification} $\rightarrow$ \textbf{Feature Extraction} $\rightarrow$ \textbf{Sequence Modeling} $\rightarrow$ \textbf{CTC Decoder}
+    \end{block}
+    
+    \vspace{0.5em}
+    \textbf{Các bước chính:}
+    \begin{enumerate}
+        \item \textbf{Rectification:} Nắn thẳng biển số nghiêng/cong (STN/TPS)
+        \item \textbf{Feature Extraction:} Trích xuất đặc trưng (SVTR backbone)
+        \item \textbf{Sequence Modeling:} Mô hình hóa chuỗi ký tự (Attention)
+        \item \textbf{CTC Decoder:} Giải mã thành chuỗi ký tự cuối cùng
+    \end{enumerate}
+\end{frame}
+
+\begin{frame}{Rectification - Nắn thẳng biển số}
+    \textbf{Vấn đề:} Biển số thường bị nghiêng/xoay do góc camera
+    
+    \begin{columns}[c]
+    \begin{column}{0.48\textwidth}
+        \begin{block}{Spatial Transformer Network}
+        \begin{enumerate}
+            \item \textbf{Localization:} CNN học $\theta$
+            \item \textbf{Grid Generator:} Lưới mới
+            \item \textbf{Sampler:} Lấy mẫu pixel
+        \end{enumerate}
+        \end{block}
+        
+        \textbf{Phép biến đổi Affine:}
+        \small
+        $$ \begin{pmatrix} x^s \\ y^s \end{pmatrix} = \begin{bmatrix} \theta_{11} & \theta_{12} & \theta_{13} \\ \theta_{21} & \theta_{22} & \theta_{23} \end{bmatrix} \begin{pmatrix} x^t \\ y^t \\ 1 \end{pmatrix} $$
+    \end{column}
+    \begin{column}{0.48\textwidth}
+        \centering
+        \includegraphics[width=0.9\linewidth]{Figures/plate_perspective.jpg}
+        
+        $\downarrow$ STN/TPS
+        
+        \includegraphics[width=0.9\linewidth]{Figures/plate_rectified.jpg}
+    \end{column}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{TPS - Thin-Plate Spline}
+    \textbf{Vấn đề:} Affine không đủ cho văn bản cong (curved text)
+    
+    \begin{block}{Thin-Plate Spline Transformation}
+    Sử dụng $K$ điểm điều khiển để biến đổi phi tuyến:
+    $$ f(x, y) = a_0 + a_x x + a_y y + \sum_{k=1}^{K} w_k \cdot U(r_k) $$
+    \begin{itemize}
+        \item $U(r) = r^2 \log(r)$: Radial basis function
+        \item $K = 20$ điểm điều khiển (thường dùng)
+    \end{itemize}
+    \end{block}
+    
+    \vspace{0.3em}
+    \textbf{Kết quả:} Văn bản cong $\rightarrow$ Văn bản thẳng
+\end{frame}
+
+\begin{frame}[allowframebreaks]{Kiến trúc SVTR - Scene Text Recognition}
+    \textbf{SVTR} (PP-OCRv3+): Thay thế CRNN truyền thống bằng Transformer
+    
+    \begin{figure}
+        \centering
+        \includegraphics[width=0.85\linewidth]{Figures/svtr_architecture.png}
+        \caption{Kiến trúc tổng quan SVTR}
+    \end{figure}
+    
+    \framebreak
+    
+    \begin{columns}[c]
+    \begin{column}{0.45\textwidth}
+        \begin{block}{Các bước xử lý}
+        \begin{enumerate}
+            \item \textbf{Patch Embedding:} patch $4 \times 4$
+            \item \textbf{Local Mixing:} Trong ký tự
+            \item \textbf{Global Mixing:} Giữa các ký tự
+            \item \textbf{Height Merging:} Gộp 1D
+        \end{enumerate}
+        \end{block}
+    \end{column}
+    \begin{column}{0.52\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{Figures/svtr_local_global_mixing.png}
+    \end{column}
+    \end{columns}
+    
+    \vspace{0.3em}
+    \textbf{Ưu điểm:} Tính toán song song, ngữ cảnh toàn cục, độ chính xác cao hơn 1-2\%
+\end{frame}
+
+\begin{frame}{So sánh SVTR và CRNN}
+    \begin{table}
+    \centering
+    \small
+    \begin{tabular}{|l|c|c|}
+    \hline
+    \textbf{Tiêu chí} & \textbf{CRNN} & \textbf{SVTR} \\ \hline
+    Feature Extraction & CNN & Patch + Transformer \\ \hline
+    Sequence Modeling & Bi-LSTM & Self-Attention \\ \hline
+    Tính toán & Tuần tự & Song song \\ \hline
+    Ngữ cảnh & Hạn chế & Toàn cục \\ \hline
+    Tốc độ & Chậm hơn & Nhanh hơn \\ \hline
+    \end{tabular}
+    \end{table}
+    
+    \vspace{0.5em}
+    $\rightarrow$ PaddleOCR 2.7+ mặc định dùng \textbf{SVTR\_LCNet}
+\end{frame}
+
+\begin{frame}{CTC Decoder - Giải mã chuỗi ký tự}
+    \textbf{CTC} (Connectionist Temporal Classification): Giải mã không cần alignment
+    
+    \begin{block}{Nguyên lý}
+    \begin{itemize}
+        \item Mỗi ``lát cắt'' dọc $\rightarrow$ vector xác suất trên tập ký tự
+        \item Thêm ký tự đặc biệt \textbf{blank} ($\epsilon$)
+        \item \textbf{Collapse rule:} Loại bỏ lặp + blank
+    \end{itemize}
+    \end{block}
+    
+    \textbf{Ví dụ:} Biển số ``15A''
+    \begin{center}
+    \small
+    \texttt{1-1-$\epsilon$-5-$\epsilon$-A-A} $\xrightarrow{\text{collapse}}$ \texttt{15A}
+    \end{center}
+    
+    \vspace{0.3em}
+    \textbf{Decoding:}
+    \begin{itemize}
+        \item \textbf{Greedy:} Chọn ký tự xác suất cao nhất mỗi bước
+        \item \textbf{Beam Search:} Duy trì $k$ hypotheses tốt nhất
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Tiền xử lý ảnh biển số}
+    \textbf{Mục đích:} Cải thiện chất lượng ảnh trước khi OCR
+    
+    \begin{block}{Các bước tiền xử lý}
+    \begin{enumerate}
+        \item \textbf{Resize:} Đưa về chiều cao chuẩn (100px)
+        \item \textbf{Grayscale:} Chuyển ảnh xám
+        \item \textbf{CLAHE:} Cân bằng histogram thích ứng
+        \item \textbf{Bilateral Filter:} Khử nhiễu giữ cạnh
+        \item \textbf{Sharpening:} Làm sắc nét ký tự
+    \end{enumerate}
+    \end{block}
+    
+    \textbf{CLAHE} (Contrast Limited Adaptive Histogram Equalization):
+    \begin{itemize}
+        \item Chia ảnh thành tile $8 \times 8$
+        \item Equalization cục bộ + clip limit để tránh noise
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Validation \& Character Correction}
+    \begin{columns}[c]
+    \begin{column}{0.55\textwidth}
+        \begin{block}{Format Validation (Biển số Việt Nam)}
+        \begin{itemize}
+            \item \textbf{Ô tô:} \texttt{[0-9]\{2\}[A-Z][0-9]\{4,5\}}
+            \item \textbf{Xe máy:} \texttt{[0-9]\{2\}[A-Z][A-Z0-9][0-9]\{4,5\}}
+        \end{itemize}
+        \end{block}
+        
+        \begin{block}{Character Correction}
+        Sửa lỗi nhầm lẫn ký tự dựa trên vị trí:
+        \begin{itemize}
+            \item Vị trí 0-1: \texttt{O} $\to$ \texttt{0}
+            \item Vị trí 2: \texttt{0} $\to$ \texttt{O}
+            \item Vị trí 3+: \texttt{B} $\to$ \texttt{8}
+        \end{itemize}
+        \end{block}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{Figures/plate_val_pred.jpg}
+        
+        \tiny Kết quả validation biển số
+    \end{column}
+    \end{columns}
+\end{frame}

@@ -1,16 +1,27 @@
 ﻿\section{Cơ sở lý thuyết ALPR}
 
 \begin{frame}{Tổng quan hệ thống ALPR}
-    \textbf{ALPR gồm hai giai đoạn chính:}
-    \begin{enumerate}
-        \item \textbf{Plate Detection:} Xác định vị trí biển số trong ảnh.
-        \item \textbf{OCR:} Nhận dạng ký tự trên biển số.
-    \end{enumerate}
+    \begin{columns}[c]
+    \begin{column}{0.55\textwidth}
+        \textbf{ALPR gồm hai giai đoạn chính:}
+        \begin{enumerate}
+            \item \textbf{Plate Detection:} Xác định vị trí biển số.
+            \item \textbf{OCR:} Nhận dạng ký tự trên biển số.
+        \end{enumerate}
 
-    \begin{block}{Pipeline tổng quan}
-    \centering
-    \textbf{Ảnh đầu vào} $\rightarrow$ \textbf{Plate Detection} $\rightarrow$ \textbf{Tiền xử lý (CLAHE)} $\rightarrow$ \textbf{OCR} $\rightarrow$ \textbf{Biển số}
-    \end{block}
+        \begin{block}{Pipeline tổng quan}
+        \centering
+        \small
+        \textbf{Ảnh} $\rightarrow$ \textbf{Detection} $\rightarrow$ \textbf{CLAHE} $\rightarrow$ \textbf{OCR}
+        \end{block}
+    \end{column}
+    \begin{column}{0.42\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{Figures/plate_inference2.png}
+        
+        \tiny Demo phát hiện biển số
+    \end{column}
+    \end{columns}
 \end{frame}
 
 \begin{frame}{Định dạng biển số Việt Nam}
@@ -20,8 +31,8 @@
             \toprule
             \textbf{Loại} & \textbf{Định dạng} & \textbf{Ví dụ} \\
             \midrule
-            Ô tô (1 dòng) & XX-Y XXXXX & 30G-07784 \\
-            Ô tô (2 dòng) & XX-Y / XXXXX & 30G / 07784 \\
+            Ô tô (1 dòng) & XX-Y XXXXX & 15A-285.72 \\
+            Ô tô (2 dòng) & XX-Y / XXXXX & 15A / 285.72 \\
             Xe máy & XX-YY / XXX.XX & 29-H1 / 234.56 \\
             \bottomrule
         \end{tabular}
