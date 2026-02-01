@@ -1,0 +1,26 @@
+\babel@toc {vietnamese}{}\relax 
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {3.1}{\ignorespaces Các định dạng biển số xe Việt Nam}}{18}{table.caption.26}%
+\contentsline {table}{\numberline {3.2}{\ignorespaces So sánh các phiên bản YOLOv8}}{21}{table.caption.32}%
+\contentsline {table}{\numberline {3.3}{\ignorespaces Bảng hiệu chỉnh ký tự phổ biến}}{23}{table.caption.34}%
+\contentsline {table}{\numberline {3.4}{\ignorespaces So sánh hai phương pháp triển khai ALPR}}{25}{table.caption.42}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {4.1}{\ignorespaces Tham số cấu hình huấn luyện YOLOv8 cho phát hiện phương tiện}}{29}{table.caption.47}%
+\contentsline {table}{\numberline {4.2}{\ignorespaces Cấu hình huấn luyện Plate Detection}}{34}{table.caption.53}%
+\contentsline {table}{\numberline {4.3}{\ignorespaces Bảng hiệu chỉnh ký tự}}{36}{table.caption.59}%
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {5.1}{\ignorespaces Cấu hình chi tiết môi trường thực nghiệm}}{39}{table.caption.60}%
+\contentsline {table}{\numberline {5.2}{\ignorespaces Kết quả đánh giá hiệu năng mô hình YOLOv8n phát hiện phương tiện}}{41}{table.caption.64}%
+\contentsline {table}{\numberline {5.3}{\ignorespaces Kết quả mAP@50 theo từng lớp phương tiện}}{41}{table.caption.66}%
+\contentsline {table}{\numberline {5.4}{\ignorespaces Kết quả đánh giá Plate Detection trên tập Validation}}{45}{table.caption.71}%
+\contentsline {table}{\numberline {5.5}{\ignorespaces Kết quả huấn luyện Mô hình tích hợp 6 lớp}}{47}{table.caption.75}%
+\contentsline {table}{\numberline {5.6}{\ignorespaces Kết quả mAP@50 theo từng lớp của mô hình tích hợp 6 lớp}}{47}{table.caption.76}%
+\contentsline {table}{\numberline {5.7}{\ignorespaces Hiệu năng thực tế Phương pháp 1 (Two-Stage)}}{50}{table.caption.83}%
+\contentsline {table}{\numberline {5.8}{\ignorespaces Hiệu năng thực tế Phương pháp 2 (One-Stage)}}{51}{table.caption.87}%
+\contentsline {table}{\numberline {5.9}{\ignorespaces So sánh kết quả huấn luyện 3 mô hình Detection}}{55}{table.caption.95}%
+\contentsline {table}{\numberline {5.10}{\ignorespaces Bảng so sánh hiệu năng hai phương pháp phát hiện biển số}}{57}{table.caption.101}%
+\addvspace {10\p@ }
+\addvspace {10\p@ }
+\contentsline {table}{\numberline {7.1}{\ignorespaces Bảng phím tắt}}{73}{table.caption.135}%

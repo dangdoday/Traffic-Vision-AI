@@ -1,0 +1,80 @@
+% Defining the document class and basic settings
+\documentclass[11pt]{beamer}
+
+% Setting up graphics path and essential packages
+\graphicspath{{Figures/}{./}}
+\usepackage{booktabs}
+\usepackage[utf8]{inputenc}
+\usepackage[T5]{fontenc}
+\usepackage[vietnamese]{babel}
+\usepackage{amsmath, amssymb}
+% NOTE: Avoid Helvetica/Times with T5 to prevent missing vntex fonts on some MiKTeX setups.
+\usepackage{appendixnumberbeamer}
+% Using Beamer theme and font settings
+\usetheme{Madrid}
+\usefonttheme{default}
+\useinnertheme{circles}
+
+% --- BẮT ĐẦU TUỲ CHỈNH FOOTER ---
+\setbeamertemplate{footline}{%
+  \leavevmode%
+  \hbox{%
+    \begin{beamercolorbox}[wd=0.33\paperwidth,ht=2.5ex,dp=1ex,center]{author in head/foot}%
+
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=0.34\paperwidth,ht=2.5ex,dp=1ex,center]{title in head/foot}%
+      Báo cáo giữa kỳ
+    \end{beamercolorbox}%
+    \begin{beamercolorbox}[wd=0.33\paperwidth,ht=2.5ex,dp=1ex,center]{date in head/foot}%
+      01/2026
+    \end{beamercolorbox}%
+  }%
+  \vskip0pt%
+}
+% --- KẾT THÚC TUỲ CHỈNH FOOTER ---
+
+% Defining title, author, and date
+\title{BÁO CÁO GIỮA KỲ \\ HỆ THỐNG GIÁM SÁT GIAO THÔNG THÔNG MINH \\ VÀ NHẬN DIỆN BIỂN SỐ XE VIỆT NAM}
+
+\author{
+Nguyễn Hải Đăng - 22001560 \\
+Mai Hoàng Anh - 22001538 \\
+}
+\institute{
+GVHD: TS Nguyễn Thị Bích Thủy \\
+Môn học: MAT3377 -- Một số vấn đề chọn lọc về Trí tuệ nhân tạo
+}
+\date[Tháng 01 Năm 2026]
+
+%----------------------------------------------------------------------------------------
+
+%----------------------------------------------------------------------------------------
+%   DOCUMENT START
+%----------------------------------------------------------------------------------------
+
+\begin{document}
+
+%----------------------------------------------------------------------------------------
+%   TITLE PAGE
+%----------------------------------------------------------------------------------------
+
+\begin{frame}[plain]
+    \titlepage
+\end{frame}
+
+%----------------------------------------------------------------------------------------
+%   TABLE OF CONTENTS
+%----------------------------------------------------------------------------------------
+
+\begin{frame}{Nội dung trình bày}
+    \tableofcontents
+\end{frame}
+\include{li thuyet}
+\include{pp}
+\include{thuc nghiem}
+\begin{frame}[plain]
+    \centering
+    \Huge \textbf{Cảm ơn thầy cô và các bạn đã lắng nghe!}
+\end{frame}
+
+\end{document}

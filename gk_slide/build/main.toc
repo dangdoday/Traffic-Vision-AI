@@ -1,0 +1,5 @@
+\babel@toc {vietnamese}{}\relax 
+\beamer@sectionintoc {1}{Giới thiệu đề tài}{3}{0}{1}
+\beamer@sectionintoc {2}{Cơ sở lý thuyết: Phát hiện \& Theo dõi}{7}{0}{2}
+\beamer@sectionintoc {3}{Cơ sở lý thuyết ALPR}{18}{0}{3}
+\beamer@sectionintoc {4}{Phạm vi \& Định hướng}{24}{0}{4}

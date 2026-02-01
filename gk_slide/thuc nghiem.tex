@@ -1,0 +1,54 @@
+﻿%----------------------------------------------------------------------------------------
+%   PHẦN 3: PHẠM VI & ĐỊNH HƯỚNG
+%----------------------------------------------------------------------------------------
+
+\section{Phạm vi \& Định hướng}
+
+\begin{frame}{Phạm vi dữ liệu}
+    \begin{itemize}
+        \item \textbf{Dữ liệu phương tiện:} >16.000 ảnh, >65.000 bounding box (5 lớp: xe máy, xe đạp, ô tô, xe buýt, xe tải).
+        \item \textbf{Dữ liệu biển số:} VNLP (Vietnamese License Plate) cho bài toán plate detection.
+        \item \textbf{Đầu vào:} Video từ camera CCTV cố định.
+        \item \textbf{Đầu ra:} Thông tin phương tiện, cảnh báo vi phạm, chuỗi biển số.
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{Công nghệ sử dụng}
+    \begin{columns}
+        \column{0.55\textwidth}
+        \textbf{Phát hiện \& Theo dõi}
+        \begin{itemize}
+            \item YOLOv8n (Object Detection)
+            \item ByteTrack (MOT)
+            \item HSV cho nhận diện đèn
+            \item Direction Fusion cho xác định hướng xe
+        \end{itemize}
+
+        \column{0.45\textwidth}
+        \textbf{ALPR}
+        \begin{itemize}
+            \item YOLOv8n (Plate Detection)
+            \item PaddleOCR (CRNN + CTC)
+            \item CLAHE \& Sharpening
+            \item Validation \& Retry
+        \end{itemize}
+    \end{columns}
+\end{frame}
+
+\begin{frame}{Giới hạn \& Kế hoạch cuối kỳ}
+    \begin{block}{Giới hạn}
+        \begin{itemize}
+            \item Camera cố định, góc nhìn từ trên cao.
+            \item Hoạt động tốt trong điều kiện ngày/đêm có đèn đường.
+            \item Tập trung biển số nền trắng 1 dòng (ô tô, xe máy phổ biến).
+        \end{itemize}
+    \end{block}
+
+    \begin{block}{Kế hoạch cuối kỳ}
+        \begin{itemize}
+            \item Huấn luyện mô hình phát hiện phương tiện và biển số.
+            \item Đánh giá mAP, FPS, và độ ổn định theo dõi.
+            \item Tích hợp ALPR + phát hiện vi phạm vào pipeline hoàn chỉnh.
+        \end{itemize}
+    \end{block}
+\end{frame}

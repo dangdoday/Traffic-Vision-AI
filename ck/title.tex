@@ -1,0 +1,73 @@
+﻿\begin{titlepage}
+
+\newcommand{\HRule}{\rule{\linewidth}{0.5mm}} 
+
+%----------------------------------------------------------------------------------------
+%	LOGO SECTION
+%----------------------------------------------------------------------------------------
+\center 
+
+% Khung mảnh bên ngoài
+\begin{tikzpicture}[remember picture, overlay]
+    \draw[line width=0.3mm, black] 
+        ([shift={(1.2cm,-1.2cm)}]current page.north west) 
+        rectangle 
+        ([shift={(-1.2cm,1.2cm)}]current page.south east);
+\end{tikzpicture}
+
+% Khung dày bên trong
+\begin{tikzpicture}[remember picture, overlay]
+    \draw[line width=1mm, black] 
+        ([shift={(1cm,-1cm)}]current page.north west) 
+        rectangle 
+        ([shift={(-1cm,1cm)}]current page.south east);
+\end{tikzpicture}
+
+% Logo trường
+\includegraphics[width=2.5cm]{Figures/hus-logo.png}\\[0.5cm] 
+
+%----------------------------------------------------------------------------------------
+%	HEADING SECTIONS
+%----------------------------------------------------------------------------------------
+\textsc{\LARGE Trường đại học khoa học tự nhiên\\ Đại học quốc gia hà nội} \\[0.5cm] 
+\textsc{\Large BÁO CÁO CUỐI KỲ}\\[0.3cm] 
+\textsc{\large Một số vấn đề chọn lọc về Trí tuệ nhân tạo \\(MAT3377)}\\[0.3cm]
+
+%----------------------------------------------------------------------------------------
+%	TITLE SECTION
+%----------------------------------------------------------------------------------------
+\HRule \\[0.3cm]
+{ \LARGE \bfseries HỆ THỐNG GIÁM SÁT GIAO THÔNG THÔNG MINH VÀ NHẬN DIỆN BIỂN SỐ XE VIỆT NAM}\\[0.3cm] 
+\HRule \\[0.5cm]
+
+%----------------------------------------------------------------------------------------
+%	SUBTITLE SECTION
+%----------------------------------------------------------------------------------------
+\textsc{\normalsize Kết hợp phát hiện đối tượng YOLOv8, theo dõi đa đối tượng ByteTrack,\\
+phát hiện vi phạm giao thông và nhận dạng biển số với PaddleOCR}\\[0.8cm]
+ 
+%----------------------------------------------------------------------------------------
+%	AUTHOR SECTION
+%----------------------------------------------------------------------------------------
+\begin{minipage}{0.4\textwidth}
+\begin{flushleft} \large
+\emph{Nhóm thực hiện:} \\
+Nguyễn Hải Đăng - [22001560]\\ 
+Mai Hoàng Anh - [22001538]
+\end{flushleft}
+\end{minipage}
+~
+\begin{minipage}{0.4\textwidth}
+\begin{flushright} \large
+\emph{Giảng viên hướng dẫn:} \\
+TS. Nguyễn Thị Bích Thủy
+\end{flushright}
+\end{minipage}\\[0.5cm]
+
+%----------------------------------------------------------------------------------------
+%	DATE SECTION
+%----------------------------------------------------------------------------------------
+\vfill
+{\large Hà Nội, tháng 1 năm 2026}
+
+\end{titlepage}

@@ -1,0 +1,107 @@
+﻿\chapter{Mở đầu}
+\label{ch:mo_dau}
+
+\section{Đặt vấn đề}
+
+\subsection{Bối cảnh giao thông Việt Nam năm 2025}
+Bước sang năm 2025, quá trình đô thị hóa và chuyển đổi số tại Việt Nam đang diễn ra mạnh mẽ hơn bao giờ hết. Tại các thành phố lớn như Hà Nội và TP. Hồ Chí Minh, chính quyền đã bắt đầu triển khai thí điểm các hệ thống giao thông thông minh (Intelligent Transportation System - ITS) và camera phạt nguội tích hợp trí tuệ nhân tạo tại các nút giao trọng điểm. Những nỗ lực này bước đầu đã mang lại hiệu quả trong việc răn đe và nâng cao ý thức người tham gia giao thông.
+
+Tuy nhiên, việc áp dụng đại trà các hệ thống này vẫn gặp nhiều thách thức lớn:
+\begin{itemize}
+    \item \textbf{Chi phí đầu tư cao:} Các hệ thống AI nhập ngoại hoặc các giải pháp phần cứng chuyên dụng đòi hỏi ngân sách lớn để triển khai và vận hành.
+    \item \textbf{Đặc thù giao thông Việt Nam:} Mật độ xe máy dày đặc, hiện tượng giao thông hỗn hợp (mixed traffic) và hành vi di chuyển ``điền vào chỗ trống'' khiến các mô hình AI chuẩn quốc tế thường xuyên gặp sai sót hoặc bỏ lọt vi phạm.
+    \item \textbf{Nhu cầu làm chủ công nghệ:} Việc tùy biến và tích hợp sâu vào hạ tầng sẵn có đòi hỏi phải làm chủ được công nghệ lõi.
+\end{itemize}
+
+\subsection{Bài toán nhận diện biển số xe}
+Song song với giám sát vi phạm, nhận diện biển số xe tự động (Automatic License Plate Recognition - ALPR) là một trong những ứng dụng quan trọng của thị giác máy tính trong lĩnh vực giao thông thông minh. Tại Việt Nam, nhu cầu về hệ thống ALPR ngày càng tăng cao trong các ứng dụng thực tế như:
+\begin{itemize}
+    \item Hệ thống thu phí tự động (ETC - Electronic Toll Collection)
+    \item Quản lý bãi đỗ xe thông minh
+    \item Giám sát giao thông và ghi nhận vi phạm
+    \item Kiểm soát an ninh tại các cổng ra vào
+\end{itemize}
+
+Biển số xe Việt Nam có định dạng đặc thù với các ký tự chữ và số, được phân chia theo tỉnh/thành phố và loại phương tiện. Điều này đặt ra thách thức riêng cho các hệ thống ALPR quốc tế khi áp dụng vào thực tế Việt Nam do:
+\begin{itemize}
+    \item Định dạng biển số khác biệt so với tiêu chuẩn quốc tế
+    \item Chất lượng ảnh từ camera giám sát không đồng đều
+    \item Điều kiện thời tiết và ánh sáng đa dạng
+    \item Font chữ và kích thước biển số đặc thù
+\end{itemize}
+
+\subsection{Định hướng nghiên cứu}
+Xuất phát từ thực tế trên, nhóm nghiên cứu lựa chọn đề tài \textbf{``Hệ thống giám sát giao thông thông minh và nhận diện biển số xe Việt Nam''} với mục tiêu xây dựng một hệ thống hoàn chỉnh có khả năng:
+\begin{enumerate}
+    \item Chạy trên phần cứng phổ thông với tốc độ xử lý thời gian thực
+    \item Đảm bảo độ chính xác cao trong việc nhận diện các loại phương tiện đặc thù
+    \item Tự động phát hiện các hành vi vi phạm giao thông phức tạp
+    \item Nhận diện và đọc được biển số xe Việt Nam
+\end{enumerate}
+
+Hệ thống sử dụng mô hình YOLOv8 tiên tiến, được tinh chỉnh (fine-tune) trên dữ liệu giao thông nội địa, kết hợp với các thuật toán hậu xử lý thông minh và công nghệ OCR hiện đại để giải quyết bài toán giám sát giao thông với chi phí thấp và hiệu quả cao.
+
+\section{Mục tiêu của đề tài}
+Mục tiêu chính của đề tài là xây dựng một hệ thống giám sát giao thông hoàn chỉnh với các khả năng sau:
+
+\subsection{Module phát hiện và theo dõi phương tiện}
+\begin{itemize}
+    \item \textbf{Nhận diện đa lớp phương tiện:} Phân loại chính xác 5 loại phương tiện phổ biến trong dòng giao thông hỗn hợp: Xe máy, Xe đạp, Ô tô con, Xe buýt và Xe tải.
+    \item \textbf{Theo dõi và đếm lưu lượng:} Sử dụng YOLOv8 với thuật toán tracking ByteTrack tích hợp để theo dõi quỹ đạo di chuyển, đếm lưu lượng xe theo từng loại và từng làn đường.
+\end{itemize}
+
+\subsection{Module phát hiện vi phạm}
+\begin{itemize}
+    \item \textbf{Giám sát tín hiệu giao thông:} Tự động định vị và nhận diện trạng thái màu sắc của đèn giao thông (Xanh/Đỏ/Vàng) bằng kỹ thuật xử lý ảnh trên không gian màu HSV.
+    \item \textbf{Phát hiện vi phạm tự động:} Kết hợp logic máy tính để phát hiện chính xác các hành vi: Vượt đèn đỏ (dựa trên phân tích hướng di chuyển) và Đi sai làn đường quy định.
+\end{itemize}
+
+\subsection{Module nhận diện biển số xe}
+\begin{itemize}
+    \item \textbf{Phát hiện biển số (Plate Detection):} Huấn luyện mô hình YOLOv8 để phát hiện vị trí biển số trong ảnh/video với độ chính xác cao (mAP@50 $>$ 99\%).
+    \item \textbf{Nhận dạng ký tự (OCR):} Sử dụng PaddleOCR kết hợp các kỹ thuật tiền xử lý (CLAHE, Sharpening) để đọc chính xác các ký tự trên biển số.
+    \item \textbf{Cơ chế ổn định kết quả:} Xây dựng Validation \& Retry mechanism để đảm bảo kết quả OCR cuối cùng chính xác và đúng format biển số Việt Nam.
+\end{itemize}
+
+\section{Phạm vi nghiên cứu}
+
+\subsection{Dữ liệu}
+\begin{itemize}
+    \item \textbf{Dữ liệu phương tiện:} Sử dụng bộ dữ liệu thực tế tự quay chụp và thu thập để đảm bảo mô hình học được các đặc trưng của phương tiện tại Việt Nam (hơn 16.000 ảnh với 65.000 bounding box).
+    \item \textbf{Dữ liệu biển số:} Sử dụng bộ dữ liệu VNLP (Vietnamese License Plate) để huấn luyện mô hình phát hiện biển số.
+\end{itemize}
+
+\subsection{Công nghệ sử dụng}
+\begin{itemize}
+    \item \textbf{Phát hiện đối tượng:} YOLOv8n (phiên bản nano) -- nhanh và nhẹ
+    \item \textbf{Theo dõi đa đối tượng:} ByteTrack (tích hợp trong YOLOv8)
+    \item \textbf{Xử lý tín hiệu đèn:} Thuật toán trên không gian màu HSV
+    \item \textbf{Phát hiện vi phạm:} Thuật toán hình học với Direction Fusion
+    \item \textbf{OCR biển số:} PaddleOCR với kiến trúc CRNN + CTC
+    \item \textbf{Tiền xử lý ảnh:} CLAHE và Sharpening
+\end{itemize}
+
+\subsection{Giới hạn}
+\begin{itemize}
+    \item \textbf{Loại camera:} Hệ thống tập trung xử lý video từ camera giám sát cố định (CCTV) với góc quay từ trên cao.
+    \item \textbf{Điều kiện ánh sáng:} Hoạt động tốt trong điều kiện ánh sáng ban ngày và ban đêm có đèn đường.
+    \item \textbf{Loại biển số:} Hỗ trợ biển số xe Việt Nam cho cả ô tô (7-8 ký tự) và xe máy (8-9 ký tự), tập trung vào biển trắng 1 dòng.
+    \item \textbf{Đầu vào:} Video giao thông từ camera cố định.
+    \item \textbf{Đầu ra:} Thông tin phương tiện, cảnh báo vi phạm và chuỗi ký tự biển số đã được nhận dạng.
+\end{itemize}
+
+\section{Cấu trúc báo cáo}
+Báo cáo được trình bày với bố cục như sau:
+\begin{itemize}
+    \item \textbf{Chương 1: Mở đầu.} Trình bày bối cảnh giao thông Việt Nam, lý do chọn đề tài, mục tiêu và phạm vi nghiên cứu.
+    
+    \item \textbf{Chương 2: Cơ sở lý thuyết -- Phát hiện và theo dõi đối tượng.} Trình bày nền tảng toán học của mô hình YOLOv8, cơ chế tracking tích hợp (ByteTrack) và các kỹ thuật xử lý ảnh trong nhận diện tín hiệu đèn và hình học tính toán.
+    
+    \item \textbf{Chương 3: Cơ sở lý thuyết -- Nhận diện biển số xe.} Trình bày kiến trúc PaddleOCR, các kỹ thuật tiền xử lý ảnh (CLAHE, Sharpening) và cấu trúc biển số xe Việt Nam.
+    
+    \item \textbf{Chương 4: Phương pháp thực hiện.} Mô tả chi tiết kiến trúc hệ thống, quy trình xử lý dữ liệu, huấn luyện mô hình, các thuật toán xác định hướng di chuyển, phát hiện vi phạm và pipeline nhận diện biển số.
+    
+    \item \textbf{Chương 5: Thực nghiệm và Đánh giá.} Trình bày môi trường thực nghiệm, kết quả huấn luyện, kết quả chạy thực tế trên video và phân tích hiệu năng hệ thống.
+    
+    \item \textbf{Chương 6: Kết luận và Hướng phát triển.} Tổng kết các đóng góp của đề tài, những hạn chế còn tồn tại và định hướng nâng cấp trong tương lai.
+\end{itemize}
