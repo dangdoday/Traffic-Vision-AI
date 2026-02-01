@@ -40,7 +40,7 @@
     \begin{block}{Yêu cầu kỹ thuật}
     \begin{itemize}
         \item Xử lý thời gian thực trên phần cứng phổ thông.
-        \item Độ chính xác cao, vận hành ổn định.
+        \item Độ tin cậy và vận hành ổn định.
         \item Giao diện trực quan, dễ cấu hình ROI/làn đường.
     \end{itemize}
     \end{block}
@@ -88,7 +88,7 @@
         \item \textbf{Anchor-free:} Linh hoạt với đối tượng có tỉ lệ biến thiên lớn.
         \item \textbf{Module C2f:} Trích xuất đặc trưng giàu thông tin, nhẹ.
         \item \textbf{Task Aligned Assigner:} Cân bằng giữa phân loại và định vị.
-        \item \textbf{Hiệu năng:} Tốc độ cao, phù hợp real-time.
+        \item \textbf{Triển khai:} Tối ưu cho suy luận thời gian thực.
     \end{itemize}
 \end{frame}
 
@@ -123,7 +123,7 @@
     \begin{itemize}
         \item \textbf{Kalman Filter:} Dự đoán vị trí/động học.
         \item \textbf{Hungarian Algorithm:} Ghép cặp detection và track tối ưu.
-        \item \textbf{Tracking-by-Detection:} Dựa trên kết quả YOLOv8.
+        \item \textbf{Tracking-by-Detection:} Dựa trên đầu ra YOLOv8.
     \end{itemize}
 \end{frame}
 
@@ -135,7 +135,7 @@
         \item \textbf{Giai đoạn 2 (Low Score Matching):}
         Ghép các track chưa khớp với detection điểm thấp để “cứu” ID.
     \end{enumerate}
-    \textit{Ưu điểm:} Tốc độ cao, ổn định khi che khuất.
+    \textit{Ưu điểm:} Tận dụng detection điểm thấp, giảm mất ID khi che khuất.
     \framebreak
     \begin{figure}
         \centering
@@ -189,7 +189,7 @@
         \centering
         \includegraphics[width=\linewidth]{Figures/plate_inference1.png}
         
-        \tiny Kết quả phát hiện biển số
+        \tiny Minh họa vùng biển số
     \end{column}
     \end{columns}
 \end{frame}
@@ -200,7 +200,6 @@
     \begin{block}{Đặc điểm chính}
     \begin{itemize}
         \item Hỗ trợ \textbf{80+ ngôn ngữ}
-        \item Độ chính xác cao, tốc độ nhanh (real-time)
         \item Kiến trúc nhẹ: \textbf{SVTR\_LCNet} (~12MB model)
     \end{itemize}
     \end{block}
@@ -271,7 +270,7 @@
     \end{block}
     
     \vspace{0.3em}
-    \textbf{Kết quả:} Văn bản cong $\rightarrow$ Văn bản thẳng
+    \textbf{Tác dụng:} Văn bản cong $\rightarrow$ Văn bản thẳng
 \end{frame}
 
 \begin{frame}[allowframebreaks]{Kiến trúc SVTR - Scene Text Recognition}
@@ -303,7 +302,7 @@
     \end{columns}
     
     \vspace{0.3em}
-    \textbf{Ưu điểm:} Tính toán song song, ngữ cảnh toàn cục, độ chính xác cao hơn 1-2\%
+    \textbf{Ưu điểm:} Tính toán song song, ngữ cảnh toàn cục, phù hợp nhận dạng chữ
 \end{frame}
 
 \begin{frame}{So sánh SVTR và CRNN}
@@ -317,7 +316,6 @@
     Sequence Modeling & Bi-LSTM & Self-Attention \\ \hline
     Tính toán & Tuần tự & Song song \\ \hline
     Ngữ cảnh & Hạn chế & Toàn cục \\ \hline
-    Tốc độ & Chậm hơn & Nhanh hơn \\ \hline
     \end{tabular}
     \end{table}
     
@@ -393,7 +391,7 @@
         \centering
         \includegraphics[width=\linewidth]{Figures/plate_val_pred.jpg}
         
-        \tiny Kết quả validation biển số
+        \tiny Minh họa kiểm tra định dạng
     \end{column}
     \end{columns}
 \end{frame}

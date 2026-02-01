@@ -33,34 +33,34 @@ Biển số xe Việt Nam có định dạng đặc thù với các ký tự ch�
 \subsection{Định hướng nghiên cứu}
 Xuất phát từ thực tế trên, nhóm nghiên cứu lựa chọn đề tài \textbf{``Hệ thống giám sát giao thông thông minh và nhận diện biển số xe Việt Nam''} với mục tiêu xây dựng một hệ thống hoàn chỉnh có khả năng:
 \begin{enumerate}
-    \item Chạy trên phần cứng phổ thông với tốc độ xử lý thời gian thực
-    \item Đảm bảo độ chính xác cao trong việc nhận diện các loại phương tiện đặc thù
+    \item Chạy trên phần cứng phổ thông với khả năng xử lý thời gian thực
+    \item Đảm bảo độ tin cậy trong việc nhận diện các loại phương tiện đặc thù
     \item Tự động phát hiện các hành vi vi phạm giao thông phức tạp
     \item Nhận diện và đọc được biển số xe Việt Nam
 \end{enumerate}
 
-Hệ thống sử dụng mô hình YOLOv8 tiên tiến, được tinh chỉnh (fine-tune) trên dữ liệu giao thông nội địa, kết hợp với các thuật toán hậu xử lý thông minh và công nghệ OCR hiện đại để giải quyết bài toán giám sát giao thông với chi phí thấp và hiệu quả cao.
+Hệ thống sử dụng mô hình YOLOv8 tiên tiến, được tinh chỉnh (fine-tune) trên dữ liệu giao thông nội địa, kết hợp với các thuật toán hậu xử lý thông minh và công nghệ OCR hiện đại để giải quyết bài toán giám sát giao thông với chi phí thấp và phù hợp triển khai.
 
 \section{Mục tiêu của đề tài}
 Mục tiêu chính của đề tài là xây dựng một hệ thống giám sát giao thông hoàn chỉnh với các khả năng sau:
 
 \subsection{Module phát hiện và theo dõi phương tiện}
 \begin{itemize}
-    \item \textbf{Nhận diện đa lớp phương tiện:} Phân loại chính xác 5 loại phương tiện phổ biến trong dòng giao thông hỗn hợp: Xe máy, Xe đạp, Ô tô con, Xe buýt và Xe tải.
+    \item \textbf{Nhận diện đa lớp phương tiện:} Phân loại 5 loại phương tiện phổ biến trong dòng giao thông hỗn hợp: Xe máy, Xe đạp, Ô tô con, Xe buýt và Xe tải.
     \item \textbf{Theo dõi và đếm lưu lượng:} Sử dụng YOLOv8 với thuật toán tracking ByteTrack tích hợp để theo dõi quỹ đạo di chuyển, đếm lưu lượng xe theo từng loại và từng làn đường.
 \end{itemize}
 
 \subsection{Module phát hiện vi phạm}
 \begin{itemize}
     \item \textbf{Giám sát tín hiệu giao thông:} Tự động định vị và nhận diện trạng thái màu sắc của đèn giao thông (Xanh/Đỏ/Vàng) bằng kỹ thuật xử lý ảnh trên không gian màu HSV.
-    \item \textbf{Phát hiện vi phạm tự động:} Kết hợp logic máy tính để phát hiện chính xác các hành vi: Vượt đèn đỏ (dựa trên phân tích hướng di chuyển) và Đi sai làn đường quy định.
+    \item \textbf{Phát hiện vi phạm tự động:} Kết hợp logic máy tính để phát hiện các hành vi: Vượt đèn đỏ (dựa trên phân tích hướng di chuyển) và Đi sai làn đường quy định.
 \end{itemize}
 
 \subsection{Module nhận diện biển số xe}
 \begin{itemize}
-    \item \textbf{Phát hiện biển số (Plate Detection):} Huấn luyện mô hình YOLOv8 để phát hiện vị trí biển số trong ảnh/video với độ chính xác cao (mAP@50 $>$ 99\%).
-    \item \textbf{Nhận dạng ký tự (OCR):} Sử dụng PaddleOCR kết hợp các kỹ thuật tiền xử lý (CLAHE, Sharpening) để đọc chính xác các ký tự trên biển số.
-    \item \textbf{Cơ chế ổn định kết quả:} Xây dựng Validation \& Retry mechanism để đảm bảo kết quả OCR cuối cùng chính xác và đúng format biển số Việt Nam.
+    \item \textbf{Phát hiện biển số (Plate Detection):} Huấn luyện mô hình YOLOv8 để phát hiện vị trí biển số trong ảnh/video.
+    \item \textbf{Nhận dạng ký tự (OCR):} Sử dụng PaddleOCR kết hợp các kỹ thuật tiền xử lý (CLAHE, Sharpening) để nhận dạng các ký tự trên biển số.
+    \item \textbf{Cơ chế ổn định đầu ra:} Xây dựng Validation \& Retry mechanism để đảm bảo chuỗi OCR đúng format biển số Việt Nam.
 \end{itemize}
 
 \section{Phạm vi nghiên cứu}
@@ -73,7 +73,7 @@ Mục tiêu chính của đề tài là xây dựng một hệ thống giám sá
 
 \subsection{Công nghệ sử dụng}
 \begin{itemize}
-    \item \textbf{Phát hiện đối tượng:} YOLOv8n (phiên bản nano) -- nhanh và nhẹ
+    \item \textbf{Phát hiện đối tượng:} YOLOv8n (phiên bản nano) -- gọn nhẹ
     \item \textbf{Theo dõi đa đối tượng:} ByteTrack (tích hợp trong YOLOv8)
     \item \textbf{Xử lý tín hiệu đèn:} Thuật toán trên không gian màu HSV
     \item \textbf{Phát hiện vi phạm:} Thuật toán hình học với Direction Fusion

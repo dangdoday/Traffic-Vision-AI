@@ -19,7 +19,7 @@
         \centering
         \includegraphics[width=\linewidth]{Figures/plate_inference2.png}
         
-        \tiny Demo phát hiện biển số
+        \tiny Minh họa vùng biển số
     \end{column}
     \end{columns}
 \end{frame}
@@ -69,7 +69,7 @@
 \end{frame}
 
 \begin{frame}{Validation \& Retry}
-    \textbf{Ý tưởng:} Chỉ lưu kết quả OCR đúng format biển số Việt Nam.
+    \textbf{Ý tưởng:} Chỉ lưu chuỗi OCR đúng format biển số Việt Nam.
     \begin{itemize}
         \item Xe máy: \texttt{[0-9]\{2\}[A-Z][A-Z0-9][0-9]\{4,5\}}
         \item Ô tô: \texttt{[0-9]\{2\}[A-Z][0-9]\{4,5\}}
@@ -80,17 +80,17 @@
 \begin{frame}{Hai phương pháp triển khai ALPR}
     \begin{table}
         \centering
-        \begin{tabular}{p{0.26\linewidth} p{0.32\linewidth} p{0.32\linewidth}}
+        \begin{tabular}{p{0.28\linewidth} p{0.32\linewidth} p{0.32\linewidth}}
             \toprule
             \textbf{Tiêu chí} & \textbf{Two-Stage} & \textbf{One-Stage} \\
             \midrule
             Số model & 2 (Vehicle + Plate) & 1 (6 lớp) \\
-            Tốc độ & 5--10 FPS & 15--20 FPS \\
-            Độ chính xác plate & Cao ($\sim$99.5\%) & Trung bình ($\sim$78.5\%) \\
-            Tài nguyên & ~2.5GB & ~1.2GB \\
+            Luồng xử lý & Tách 2 bước & Gộp 1 bước \\
+            Huấn luyện & Tách riêng theo nhiệm vụ & Huấn luyện đa nhiệm \\
+            Độ phức tạp triển khai & Cao hơn & Gọn hơn \\
             \bottomrule
         \end{tabular}
     \end{table}
 
-    \textit{Tuỳ nhu cầu: ưu tiên độ chính xác hoặc tốc độ real-time.}
+    \textit{Tuỳ nhu cầu: cân bằng độ phức tạp và tính tích hợp.}
 \end{frame}

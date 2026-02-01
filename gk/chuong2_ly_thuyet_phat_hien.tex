@@ -41,7 +41,7 @@ Việc ánh xạ từ không gian pixel sang không gian ngữ nghĩa của các
 \section{Cơ sở lý thuyết về mô hình YOLO}
 
 \subsection{Hợp nhất bài toán thành một mạng duy nhất}
-Trước khi kiến trúc YOLO (You Only Look Once) ra đời, các hệ thống phát hiện đối tượng kinh điển thường xử lý bài toán theo quy trình hai giai đoạn tách biệt (Two-Stage Detectors). Các phương pháp như R-CNN sử dụng thuật toán đề xuất vùng (Region Proposal) như Selective Search để tìm kiếm các vùng ứng viên, sau đó mới áp dụng bộ phân loại trên từng vùng này. Tuy đạt độ chính xác cao, nhưng quy trình này tốn kém về mặt tính toán và khó tối ưu hóa toàn cục.
+Trước khi kiến trúc YOLO (You Only Look Once) ra đời, các hệ thống phát hiện đối tượng kinh điển thường xử lý bài toán theo quy trình hai giai đoạn tách biệt (Two-Stage Detectors). Các phương pháp như R-CNN sử dụng thuật toán đề xuất vùng (Region Proposal) như Selective Search để tìm kiếm các vùng ứng viên, sau đó mới áp dụng bộ phân loại trên từng vùng này. Quy trình này tốn kém về mặt tính toán và khó tối ưu hóa toàn cục.
 
 YOLO, được giới thiệu bởi Redmon et al. (2015), đã thay đổi hoàn toàn tư duy này bằng cách tái định nghĩa việc phát hiện đối tượng thành một bài toán \textbf{hồi quy duy nhất} (Single Regression Problem). Thay vì quét ảnh nhiều lần, YOLO chỉ cần một lần truyền thẳng (forward pass) qua mạng nơ-ron tích chập (CNN) để dự đoán đồng thời cả vị trí khung bao (bounding box) và xác suất lớp đối tượng. Điều này cho phép mô hình nhìn thấy ngữ cảnh toàn cục của bức ảnh, giảm thiểu các sai sót do nhầm lẫn hậu cảnh (background).
 
@@ -84,7 +84,7 @@ Hầu hết các phiên bản YOLO hiện đại đều tuân theo kiến trúc 
 \subsection{Sự tiến hóa và Lựa chọn YOLOv8}
 Trải qua quá trình phát triển, YOLO đã có những bước tiến vượt bậc:
 \begin{itemize}
-    \item \textbf{YOLOv1-v3:} Tập trung vào tốc độ thời gian thực, giới thiệu khái niệm Anchor Box để ổn định việc huấn luyện.
+    \item \textbf{YOLOv1-v3:} Tập trung vào triển khai thời gian thực, giới thiệu khái niệm Anchor Box để ổn định việc huấn luyện.
     \item \textbf{YOLOv4-v5:} Tối ưu hóa mạnh mẽ về kỹ thuật huấn luyện (Training Tricks) như Mosaic Augmentation và cải tiến kiến trúc với CSPNet để tăng cường luồng gradient.
     \item \textbf{YOLOv6-v8 (2022-2023):} Đánh dấu sự chuyển dịch sang kiến trúc \textbf{Anchor-free} (không dùng khung neo) và \textbf{Decoupled Head} (tách riêng nhánh phân loại và hồi quy).
 \end{itemize}
@@ -126,15 +126,15 @@ Kiến trúc này giúp mô hình học được các đặc trưng phong phú h
 \subsubsection{Module SPPF (Spatial Pyramid Pooling Fast)}
 Nằm ở cuối phần Backbone, module SPPF có nhiệm vụ trích xuất các đặc trưng ngữ cảnh không gian (spatial context features) ở nhiều tỷ lệ khác nhau. Thay vì sử dụng các bộ lọc có kích thước lớn gây tốn kém tính toán, SPPF thực hiện tuần tự 3 lần phép gộp cực đại (Max Pooling) với kích thước $5 \times 5$.
 
-Đầu ra là sự kết hợp (concatenation) của đầu vào gốc và kết quả của 3 lần pooling:
+Đầu ra là sự kết hợp (concatenation) của đầu vào gốc và đầu ra của 3 lần pooling:
 \begin{equation}
     \text{Out} = \text{Concat}(X, \text{MaxPool}(X), \text{MaxPool}^2(X), \text{MaxPool}^3(X))
 \end{equation}
 
-Điều này giúp mô hình nhận diện tốt các đối tượng có kích thước thay đổi lớn (như xe buýt so với xe máy) mà vẫn đảm bảo tốc độ thực thi nhanh.
+Điều này giúp mô hình nhận diện tốt các đối tượng có kích thước thay đổi lớn (như xe buýt so với xe máy) và thuận lợi cho triển khai.
 
 \subsubsection{Chiến lược gán nhãn Task Aligned Assigner}
-Một trong những cải tiến quan trọng nhất của YOLOv8 là loại bỏ cơ chế gán nhãn dựa trên IoU tĩnh (static IoU-based assignment) và thay thế bằng \textbf{Task Aligned Assigner}. Chiến lược này chọn lọc các mẫu dương (positive samples) dựa trên sự cân bằng giữa điểm phân loại và độ chính xác định vị.
+Một trong những cải tiến quan trọng nhất của YOLOv8 là loại bỏ cơ chế gán nhãn dựa trên IoU tĩnh (static IoU-based assignment) và thay thế bằng \textbf{Task Aligned Assigner}. Chiến lược này chọn lọc các mẫu dương (positive samples) dựa trên sự cân bằng giữa điểm phân loại và chất lượng định vị.
 
 Điểm số căn chỉnh (alignment score) $t$ cho mỗi anchor point được tính như sau:
 \begin{equation}
@@ -174,7 +174,7 @@ Trong đó:
     \end{equation}
 \end{itemize}
 
-Ngoài ra, YOLOv8 còn kết hợp \textbf{Distribution Focal Loss (DFL)} để tối ưu hóa phân phối xác suất của các cạnh bounding box, giúp mô hình hội tụ nhanh hơn khi dự đoán các box có biên mờ.
+Ngoài ra, YOLOv8 còn kết hợp \textbf{Distribution Focal Loss (DFL)} để tối ưu hóa phân phối xác suất của các cạnh bounding box, giúp mô hình hội tụ ổn định hơn khi dự đoán các box có biên mờ.
 
 \subsubsection{Mất mát phân loại (Classification Loss)}
 Đối với nhánh phân loại, YOLOv8 sử dụng \textbf{Varifocal Loss (VFL)} hoặc Binary Cross Entropy (BCE). VFL giúp cân bằng giữa các mẫu dương (positive samples) và mẫu âm (negative samples) khó học:
@@ -185,29 +185,6 @@ Ngoài ra, YOLOv8 còn kết hợp \textbf{Distribution Focal Loss (DFL)} để 
     \end{cases}
 \end{equation}
 Trong đó $p$ là xác suất dự đoán và $q$ là điểm IoU mục tiêu (target IoU score).
-
-\section{Các độ đo đánh giá (Evaluation Metrics)}
-Để đánh giá hiệu năng mô hình, chúng tôi sử dụng độ đo mAP (mean Average Precision) tiêu chuẩn.
-
-\subsection{Precision và Recall}
-\begin{equation}
-    \text{Precision} = \frac{TP}{TP + FP}, \quad \text{Recall} = \frac{TP}{TP + FN}
-\end{equation}
-Trong đó: $TP$ (True Positive) là số detection đúng (IoU $>$ ngưỡng), $FP$ (False Positive) là detection sai, $FN$ (False Negative) là đối tượng bị bỏ sót.
-
-\subsection{Average Precision (AP)}
-AP là diện tích dưới đường cong Precision-Recall (PR Curve) cho một lớp đối tượng cụ thể, được tính bằng tích phân:
-\begin{equation}
-    AP = \int_{0}^{1} p(r) dr
-\end{equation}
-Trong thực tế, AP được tính bằng cách nội suy tại 101 điểm recall.
-
-\subsection{Mean Average Precision (mAP)}
-mAP là trung bình cộng của AP trên tất cả $N$ lớp đối tượng (trong đề tài này $N=5$: xe máy, ô tô, xe tải, xe buýt, xe đạp):
-\begin{equation}
-    mAP = \frac{1}{N} \sum_{i=1}^{N} AP_i
-\end{equation}
-Chỉ số \textbf{mAP@50} (tính tại ngưỡng IoU=0.5) và \textbf{mAP@50:95} (trung bình trên các ngưỡng IoU từ 0.5 đến 0.95) được sử dụng làm tiêu chí chính để so sánh các mô hình trong báo cáo này.
 
 \section{Theo dõi đa đối tượng (Multi-Object Tracking)}
 \label{sec:tracking_theory}
@@ -286,7 +263,7 @@ Trong đó $\mathbf{K}_k$ là độ lợi Kalman (Kalman Gain), $\mathbf{H}_k$ l
 \end{figure}
 
 \subsection{Liên kết dữ liệu (Data Association)}
-Liên kết dữ liệu là bước quyết định trong hệ thống theo dõi, đóng vai trò cầu nối giữa các kết quả phát hiện rời rạc (discrete detections) và các quỹ đạo liên tục (continuous trajectories). Giả sử tại thời điểm $t$, ta có tập hợp $M$ quỹ đạo hiện hành $T = \{t_1, t_2, \dots, t_M\}$ và tập hợp $N$ đối tượng vừa được phát hiện $D = \{d_1, d_2, \dots, d_N\}$.
+Liên kết dữ liệu là bước quyết định trong hệ thống theo dõi, đóng vai trò cầu nối giữa các đầu ra phát hiện rời rạc (discrete detections) và các quỹ đạo liên tục (continuous trajectories). Giả sử tại thời điểm $t$, ta có tập hợp $M$ quỹ đạo hiện hành $T = \{t_1, t_2, \dots, t_M\}$ và tập hợp $N$ đối tượng vừa được phát hiện $D = \{d_1, d_2, \dots, d_N\}$.
 
 Bài toán đặt ra là tìm một ánh xạ ghép cặp 1-1 tối ưu giữa $T$ và $D$ sao cho tổng độ sai lệch (chi phí) là nhỏ nhất. Vấn đề này được mô hình hóa dưới dạng bài toán \textbf{Phân công Tuyến tính (Linear Assignment Problem)} trên đồ thị hai phía (bipartite graph).
 
@@ -370,7 +347,7 @@ Hệ thống ưu tiên liên kết các detection chất lượng cao ($\mathcal
 Việc áp dụng ByteTrack mang lại hai lợi ích lớn cho đề tài:
 \begin{enumerate}
     \item \textbf{Xử lý che khuất:} Trong điều kiện giao thông hỗn hợp tại Việt Nam, xe máy thường xuyên bị xe buýt hoặc ô tô che khuất. ByteTrack giúp "gắp" lại các xe máy này ở giai đoạn 2, giảm thiểu việc đếm sai lưu lượng.
-    \item \textbf{Tốc độ thực thi cao:} ByteTrack chỉ sử dụng thông tin hình học (geometric information) để liên kết mà không cần trích xuất đặc trưng ngoại hình (appearance features) bằng mạng nơ-ron sâu như DeepSORT. Điều này giúp giảm tải tính toán cho GPU, đảm bảo hệ thống duy trì được FPS cao (frames per second).
+    \item \textbf{Giảm tải tính toán:} ByteTrack chỉ sử dụng thông tin hình học (geometric information) để liên kết mà không cần trích xuất đặc trưng ngoại hình (appearance features) bằng mạng nơ-ron sâu như DeepSORT. Điều này giúp giảm tải tính toán cho GPU và phù hợp triển khai thời gian thực.
 \end{enumerate}
 
 \section{Xử lý ảnh và Hình học tính toán}
@@ -410,7 +387,7 @@ Hệ thống sử dụng các ngưỡng (threshold) trên kênh $H$ và $S$ đ�
 \subsection{Hình học tính toán trong phát hiện vi phạm}
 
 \subsubsection{Kiểm tra xe trong làn đường}
-Làn đường là đa giác (không bắt buộc lồi) \(P = \{v_1,\dots,v_n\}\). Tâm xe \(C(x,y)\) được kiểm tra bằng hàm \texttt{cv2.pointPolygonTest} (tương đương ray casting): kết quả \(\ge 0\) nếu điểm nằm trong/biên, \(<0\) nếu ngoài.
+Làn đường là đa giác (không bắt buộc lồi) \(P = \{v_1,\dots,v_n\}\). Tâm xe \(C(x,y)\) được kiểm tra bằng hàm \texttt{cv2.pointPolygonTest} (tương đương ray casting): giá trị trả về \(\ge 0\) nếu điểm nằm trong/biên, \(<0\) nếu ngoài.
 
 \subsubsection{Khoảng cách tới vạch dừng và sự kiện cắt qua}
 Vạch dừng: đoạn \(P_1(x_1,y_1)\)--\(P_2(x_2,y_2)\). Khoảng cách vuông góc (đường thẳng qua \(P_1,P_2\)):
@@ -440,7 +417,7 @@ Phân loại hướng di chuyển với ngưỡng \(50^\circ\):
 \end{cases}
 \]
 
-\textbf{Giải thích lựa chọn ngưỡng 50°:} Ngưỡng $50^\circ$ được chọn dựa trên thực nghiệm với các video giao thông tại Việt Nam, phù hợp với đặc thù giao thông hỗn hợp nơi xe thường di chuyển theo nhiều hướng khác nhau tại các ngã tư. Ngưỡng này đủ rộng để không nhận diện sai các xe đi thẳng nhưng có độ lệch nhỏ do điều kiện đường sá, đồng thời đủ chặt để phân biệt rõ ràng giữa đi thẳng và rẽ.
+\textbf{Giải thích lựa chọn ngưỡng 50°:} Ngưỡng $50^\circ$ được chọn để phù hợp với đặc thù giao thông hỗn hợp nơi xe thường di chuyển theo nhiều hướng khác nhau tại các ngã tư. Ngưỡng này đủ rộng để hạn chế nhận diện sai các xe đi thẳng nhưng có độ lệch nhỏ do điều kiện đường sá, đồng thời đủ chặt để phân biệt rõ ràng giữa đi thẳng và rẽ.
 
 % Minh họa vector tham chiếu vs. vector chuyển động
 \begin{figure}[!htbp]

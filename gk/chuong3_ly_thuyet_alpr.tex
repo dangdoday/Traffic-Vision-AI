@@ -67,7 +67,7 @@ Việc nhận diện biển số Việt Nam gặp một số thách thức đặ
 \section{PaddleOCR - Nhận dạng ký tự}
 
 \subsection{Giới thiệu PaddleOCR}
-PaddleOCR là một bộ công cụ OCR mã nguồn mở được phát triển bởi PaddlePaddle (Baidu). Trong dự án này, chúng tôi sử dụng \textbf{PaddleOCR phiên bản 2.7.x} (tương ứng với PP-OCRv4). PaddleOCR hỗ trợ nhận dạng văn bản đa ngôn ngữ (hơn 80 ngôn ngữ) với độ chính xác cao và tốc độ xử lý nhanh, phù hợp cho các ứng dụng thời gian thực. 
+PaddleOCR là một bộ công cụ OCR mã nguồn mở được phát triển bởi PaddlePaddle (Baidu). Trong dự án này, chúng tôi sử dụng \textbf{PaddleOCR phiên bản 2.7.x} (tương ứng với PP-OCRv4). PaddleOCR hỗ trợ nhận dạng văn bản đa ngôn ngữ (hơn 80 ngôn ngữ) với kiến trúc linh hoạt, phù hợp cho nhiều bài toán OCR. 
 
 Trong đề tài này, chúng tôi sử dụng PaddleOCR với tham số \texttt{use\_textline\_orientation=True} để tự động phát hiện và xoay văn bản nghiêng, kết hợp với \texttt{lang='en'} cho bộ ký tự Latin (phù hợp với biển số Việt Nam).
 
@@ -104,7 +104,7 @@ PaddleOCR sử dụng một pipeline hoàn chỉnh để nhận dạng văn bả
 %============================================================
 \subsection{Rectification - Nắn thẳng biển số}
 
-Biển số xe trong thực tế thường bị nghiêng, xoay hoặc biến dạng do góc chụp camera. Để cải thiện độ chính xác nhận dạng, PaddleOCR sử dụng module \textbf{Rectification} để tự động nắn thẳng ảnh văn bản trước khi đưa vào mô hình nhận dạng.
+Biển số xe trong thực tế thường bị nghiêng, xoay hoặc biến dạng do góc chụp camera. Để giảm ảnh hưởng của góc chụp và biến dạng, PaddleOCR sử dụng module \textbf{Rectification} để tự động nắn thẳng ảnh văn bản trước khi đưa vào mô hình nhận dạng.
 
 \begin{figure}[!htbp]
     \centering
@@ -361,9 +361,8 @@ SVTR xử lý ảnh văn bản giống như Vision Transformer (ViT), nhưng đ�
 \textbf{Tiêu chí} & \textbf{CRNN} & \textbf{SVTR} \\ \hline
 Trích xuất đặc trưng & CNN (ResNet, MobileNet) & Patch Embedding + Transformer \\ \hline
 Mô hình hóa chuỗi & Bidirectional LSTM & Self-Attention (Local + Global) \\ \hline
-Tính toán & Tuần tự (chậm hơn) & Song song (nhanh hơn) \\ \hline
+Tính toán & Tuần tự & Song song \\ \hline
 Ngữ cảnh & Hạn chế bởi hidden size LSTM & Toàn cục qua attention \\ \hline
-Độ chính xác & Tốt & Cao hơn 1-2\% \\ \hline
 \end{tabular}
 \end{table}
 
@@ -451,14 +450,14 @@ Trong inference, CTC decoder sử dụng:
 \begin{itemize}
     \item Tại mỗi timestep, chọn ký tự có xác suất cao nhất
     \item Sau đó áp dụng collapse rule
-    \item Nhanh nhưng có thể bỏ lỡ kết quả tối ưu toàn cục
+    \item Đơn giản, không duy trì nhiều giả thuyết
 \end{itemize}
 
 \textbf{Beam Search:}
 \begin{itemize}
     \item Duy trì $k$ hypotheses tốt nhất tại mỗi bước
     \item Cộng dồn log-probability của các ký tự
-    \item Chính xác hơn nhưng chậm hơn
+    \item Mở rộng không gian giả thuyết trong quá trình giải mã
 \end{itemize}
 
 \subsubsection{CTC Loss}
@@ -471,7 +470,7 @@ CTC Loss được tính bằng negative log-likelihood:
 
 \section{Tiền xử lý ảnh biển số}
 
-Chất lượng ảnh biển số ảnh hưởng trực tiếp đến độ chính xác của OCR. Chúng tôi áp dụng các kỹ thuật tiền xử lý sau:
+Chất lượng ảnh biển số ảnh hưởng trực tiếp đến khả năng nhận dạng của OCR. Chúng tôi áp dụng các kỹ thuật tiền xử lý sau:
 
 \subsection{CLAHE - Cân bằng histogram thích ứng}
 CLAHE (Contrast Limited Adaptive Histogram Equalization) là kỹ thuật cải thiện độ tương phản ảnh, đặc biệt hiệu quả cho ảnh có độ sáng không đều.
@@ -532,7 +531,7 @@ Công thức tính pixel mới:
 
 \subsection{Quy trình tiền xử lý hoàn chỉnh}
 \begin{enumerate}
-    \item \textbf{Crop ảnh biển số:} Từ kết quả detection của YOLOv8
+    \item \textbf{Crop ảnh biển số:} Từ đầu ra detection của YOLOv8
     \item \textbf{Chuyển Grayscale:} Để áp dụng CLAHE
     \item \textbf{Áp dụng CLAHE:} Với \texttt{clipLimit=2.0}, \texttt{tileGridSize=(8,8)}
     \item \textbf{Chuyển về RGB:} Để đưa vào PaddleOCR
@@ -541,34 +540,34 @@ Công thức tính pixel mới:
 
 \section{So sánh các phiên bản YOLOv8}
 
-Trong đề tài này, chúng tôi sử dụng \textbf{YOLOv8n} (nano) cho cả phát hiện phương tiện và phát hiện biển số vì yêu cầu cân bằng giữa tốc độ và độ chính xác.
+Trong đề tài này, chúng tôi sử dụng \textbf{YOLOv8n} (nano) cho cả phát hiện phương tiện và phát hiện biển số vì phù hợp với ràng buộc triển khai và tài nguyên.
 
 \begin{table}[!ht]
 \centering
 \caption{So sánh các phiên bản YOLOv8}
 \label{tab:yolov8_versions}
-\begin{tabular}{|c|c|c|c|}
+\begin{tabular}{|c|c|c|}
 \hline
-\textbf{Model} & \textbf{Params (M)} & \textbf{FLOPs (G)} & \textbf{mAP@50 (COCO)} \\ \hline
-YOLOv8n & 3.2 & 8.7 & 37.3 \\ \hline
-YOLOv8s & 11.2 & 28.6 & 44.9 \\ \hline
-YOLOv8m & 25.9 & 78.9 & 50.2 \\ \hline
-YOLOv8l & 43.7 & 165.2 & 52.9 \\ \hline
-YOLOv8x & 68.2 & 257.8 & 53.9 \\ \hline
+\textbf{Model} & \textbf{Params (M)} & \textbf{FLOPs (G)} \\ \hline
+YOLOv8n & 3.2 & 8.7 \\ \hline
+YOLOv8s & 11.2 & 28.6 \\ \hline
+YOLOv8m & 25.9 & 78.9 \\ \hline
+YOLOv8l & 43.7 & 165.2 \\ \hline
+YOLOv8x & 68.2 & 257.8 \\ \hline
 \end{tabular}
 \end{table}
 
 \textbf{Lý do chọn YOLOv8n:}
 \begin{itemize}
     \item Số lượng tham số nhỏ (3.2M) $\rightarrow$ phù hợp triển khai trên phần cứng phổ thông
-    \item FLOPs thấp (8.7G) $\rightarrow$ tốc độ inference cao
-    \item Đối với bài toán phát hiện biển số (single class, đối tượng tương đối dễ nhận diện), YOLOv8n đủ để đạt độ chính xác cao
+    \item FLOPs thấp (8.7G) $\rightarrow$ giảm chi phí tính toán
+    \item Phù hợp cho bài toán phát hiện biển số một lớp và tích hợp trong pipeline tổng thể
 \end{itemize}
 
 \section{Cơ chế Validation \& Retry}
 
 \subsection{Vấn đề với OCR đơn frame}
-OCR có thể cho kết quả khác nhau giữa các frame do:
+OCR có thể cho chuỗi đầu ra khác nhau giữa các frame do:
 \begin{itemize}
     \item Biển số bị rung, blur khi xe di chuyển
     \item Ánh sáng thay đổi (phản chiếu, bóng)
@@ -577,12 +576,12 @@ OCR có thể cho kết quả khác nhau giữa các frame do:
 \end{itemize}
 
 \subsection{Giải pháp: Format Validation}
-Thay vì lưu trữ nhiều kết quả và voting, chúng tôi sử dụng phương pháp validate format biển số Việt Nam:
+Thay vì lưu trữ nhiều chuỗi đầu ra và voting, chúng tôi sử dụng phương pháp validate format biển số Việt Nam:
 
 \begin{algorithm}[!ht]
 \SetAlgoLined
-\KwIn{$ocr\_text$: Kết quả OCR, $vehicle\_class$: Loại xe}
-\KwOut{$(is\_valid, cleaned\_plate)$: Kết quả validation}
+\KwIn{$ocr\_text$: Chuỗi OCR, $vehicle\_class$: Loại xe}
+\KwOut{$(is\_valid, cleaned\_plate)$: Trạng thái hợp lệ và chuỗi đã làm sạch}
 
 $cleaned \leftarrow$ RemoveSpaces($ocr\_text$)\;
 \eIf{$vehicle\_class \in \{motorbike, bicycle\}$}{
@@ -601,17 +600,17 @@ $cleaned \leftarrow$ RemoveSpaces($ocr\_text$)\;
 \end{algorithm}
 
 \subsection{Retry Mechanism}
-Khi kết quả OCR không đúng format, hệ thống sẽ retry ở frame tiếp theo:
+Khi chuỗi OCR không đúng format, hệ thống sẽ retry ở frame tiếp theo:
 \begin{itemize}
-    \item Chỉ lưu kết quả \textbf{đã validate} (đúng format)
+    \item Chỉ lưu chuỗi \textbf{đã validate} (đúng format)
     \item Nếu OCR sai format hoặc không đọc được $\rightarrow$ không lưu, thử lại frame sau
-    \item Khi đã có kết quả hợp lệ $\rightarrow$ không xử lý OCR nữa (tiết kiệm tài nguyên)
+    \item Khi đã có chuỗi hợp lệ $\rightarrow$ không xử lý OCR nữa (tiết kiệm tài nguyên)
 \end{itemize}
 
 \begin{equation}
     \text{ShouldRunOCR}(track\_id) = \begin{cases}
-        \text{True} & \text{nếu chưa có kết quả valid} \\
-        \text{False} & \text{nếu đã có kết quả valid}
+        \text{True} & \text{nếu chưa có chuỗi valid} \\
+        \text{False} & \text{nếu đã có chuỗi valid}
     \end{cases}
 \end{equation}
 
@@ -667,15 +666,15 @@ Trong hệ thống của chúng tôi, có hai cách tiếp cận để thực hi
 
 \subsubsection{Ưu điểm}
 \begin{itemize}
-    \item \textbf{Độ chính xác cao:} Mô hình chuyên biệt cho biển số thường cho kết quả tốt hơn nhờ tập trung một nhiệm vụ
-    \item \textbf{Phát hiện biển nhỏ tốt:} Vì chỉ focus vào 1 task (plate detection), mô hình học rất tốt các đặc trưng của biển số
+    \item \textbf{Mô hình chuyên biệt:} Tách riêng nhiệm vụ phát hiện biển số để tập trung đặc trưng mục tiêu
+    \item \textbf{Tập trung đặc trưng:} Chỉ xử lý một nhiệm vụ (plate detection) nên dễ tối ưu dữ liệu và huấn luyện
     \item \textbf{Linh hoạt:} Có thể thay thế từng module độc lập (ví dụ: thay YOLOv8 bằng Faster R-CNN cho plate detection)
 \end{itemize}
 
 \subsubsection{Nhược điểm}
 \begin{itemize}
-    \item \textbf{Chậm:} Cần 2 lần inference qua YOLO (vehicle detection + plate detection)
-    \item \textbf{Tiêu tốn tài nguyên:} Phải load 2 mô hình vào GPU/RAM
+    \item \textbf{Nhiều lần suy luận:} Cần 2 lần inference qua YOLO (vehicle detection + plate detection)
+    \item \textbf{Nhiều mô hình:} Phải load 2 mô hình vào GPU/RAM
     \item \textbf{Phức tạp:} Logic phải quản lý 2 models, crop vùng xe, rồi mới detect plate
 \end{itemize}
 
@@ -701,27 +700,27 @@ Phương pháp này tích hợp việc phát hiện phương tiện và biển s
 
 \subsubsection{Ưu điểm}
 \begin{itemize}
-    \item \textbf{Nhanh:} Chỉ cần 1 lần inference qua YOLO
-    \item \textbf{Tiết kiệm tài nguyên:} Chỉ cần load 1 mô hình
+    \item \textbf{Một lần suy luận:} Chỉ cần 1 lần inference qua YOLO
+    \item \textbf{Một mô hình:} Chỉ cần load 1 mô hình
     \item \textbf{Mapping tự động:} Dễ dàng gán biển số cho xe thông qua kiểm tra containment
     \item \textbf{Học ngữ cảnh:} Mô hình học được mối quan hệ không gian giữa xe và biển số
 \end{itemize}
 
 \subsubsection{Nhược điểm}
 \begin{itemize}
-    \item \textbf{Độ chính xác thấp hơn:} Có thể giảm do mất cân bằng lớp (biển số là lớp hiếm)
-    \item \textbf{Khó phát hiện biển nhỏ:} Biển số chiếm tỷ lệ nhỏ trong dataset, dễ bị miss khi xe ở xa
-    \item \textbf{Phụ thuộc teacher model:} Chất lượng annotation tự động phụ thuộc vào độ chính xác của teacher model
+    \item \textbf{Mất cân bằng lớp:} Biển số là lớp hiếm, cần xử lý cân bằng dữ liệu
+    \item \textbf{Tỷ lệ đối tượng nhỏ:} Biển số chiếm tỷ lệ nhỏ trong dataset, cần chú ý khi huấn luyện
+    \item \textbf{Phụ thuộc teacher model:} Chất lượng annotation tự động phụ thuộc vào chất lượng teacher model
 \end{itemize}
 
 \subsection{So sánh hai phương pháp}
 
-Trong phạm vi lý thuyết, so sánh dựa trên cấu trúc pipeline và suy luận về chi phí tính toán, chưa có số liệu thực nghiệm cụ thể.
+Trong phạm vi lý thuyết, so sánh dựa trên cấu trúc pipeline và chi phí tính toán dự kiến.
 \begin{itemize}
-    \item \textbf{Tốc độ dự đoán:} One-Stage nhanh hơn do chỉ một lần forward pass; Two-Stage chậm hơn vì cần hai lần phát hiện (xe + biển số) rồi OCR.
-    \item \textbf{Tài nguyên phần cứng:} Two-Stage tốn bộ nhớ và tính toán hơn do phải nạp hai mô hình; One-Stage gọn hơn với một mô hình tích hợp.
-    \item \textbf{Độ chính xác plate (suy luận):} Two-Stage có tiềm năng cao hơn nhờ mô hình chuyên biệt cho biển số; One-Stage có thể giảm do mất cân bằng lớp.
+    \item \textbf{Số lần suy luận:} One-Stage một lần forward pass; Two-Stage hai lần phát hiện (xe + biển số) rồi OCR.
+    \item \textbf{Số mô hình:} Two-Stage dùng hai mô hình phát hiện; One-Stage dùng một mô hình đa lớp.
+    \item \textbf{Mức độ chuyên biệt:} Two-Stage tách riêng nhiệm vụ; One-Stage gộp nhiệm vụ trong một mô hình.
     \item \textbf{Độ phức tạp triển khai:} One-Stage đơn giản hơn trong vận hành và bảo trì; Two-Stage phức tạp hơn do nhiều module.
 \end{itemize}
 
-\textbf{Ưu tiên triển khai:} Trong bối cảnh cần thời gian thực và phần cứng hạn chế, ưu tiên One-Stage. Two-Stage phù hợp khi mục tiêu chính là độ chính xác biển số cao.
+\textbf{Ưu tiên triển khai:} Tùy ràng buộc hạ tầng và mục tiêu hệ thống, lựa chọn One-Stage hoặc Two-Stage cho phù hợp.
