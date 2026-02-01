@@ -3,7 +3,7 @@
 %----------------------------------------------------------------------------------------
 \section{Giới thiệu đề tài}
 
-\begin{frame}{Bối cảnh giao thông Việt Nam 2025}
+\begin{frame}{Bối cảnh giao thông Việt Nam}
     \begin{itemize}
         \item Đô thị hóa và chuyển đổi số mạnh tại Hà Nội, TP. Hồ Chí Minh.
         \item ITS và camera phạt nguội bắt đầu triển khai nhưng còn phân tán.
@@ -127,6 +127,46 @@
     \end{itemize}
 \end{frame}
 
+\begin{frame}[allowframebreaks]{Bộ lọc Kalman trong Tracking}
+    \begin{block}{Mô hình trạng thái (constant velocity)}
+    $\mathbf{x}_k = [u, v, a, h, \dot{u}, \dot{v}, \dot{a}, \dot{h}]^T$
+    \end{block}
+    \begin{block}{Ký hiệu trong công thức}
+    \begin{itemize}
+        \item $\mathbf{x}_k$: trạng thái tại khung $k$; $(u,v)$ là tâm, $a=w/h$, $h$ là chiều cao.
+        \item $\dot{u}, \dot{v}, \dot{a}, \dot{h}$: vận tốc của các đại lượng tương ứng.
+        \item $\mathbf{F}$: ma trận chuyển trạng thái; $\mathbf{H}$: ma trận quan sát.
+        \item $\mathbf{z}_k$: đo lường từ detector; $\mathbf{K}$: Kalman gain.
+        \item $\hat{\mathbf{x}}_{k|k-1}$: ước lượng trước cập nhật; $\hat{\mathbf{x}}_{k|k}$: sau cập nhật.
+    \end{itemize}
+    \end{block}
+    \begin{block}{Hai bước chính}
+    \begin{itemize}
+        \item \textbf{Dự đoán:} $\hat{\mathbf{x}}_{k|k-1} = \mathbf{F}\hat{\mathbf{x}}_{k-1|k-1}$
+        \item \textbf{Cập nhật:} $\hat{\mathbf{x}}_{k|k} = \hat{\mathbf{x}}_{k|k-1} + \mathbf{K}(\mathbf{z}_k-\mathbf{H}\hat{\mathbf{x}}_{k|k-1})$
+    \end{itemize}
+    \end{block}
+    \textbf{Ý nghĩa:} làm mượt quỹ đạo, dự đoán vị trí khi bị che khuất ngắn.
+\end{frame}
+
+\begin{frame}[allowframebreaks]{Thuật toán Hungarian (Kuhn--Munkres)}
+    \textbf{Bài toán:} ghép 1--1 giữa $M$ track và $N$ detection để tối thiểu hóa chi phí.
+    \begin{itemize}
+        \item \textbf{Ma trận chi phí:} $C_{i,j} = 1 - IoU(\text{track}_i, \text{det}_j)$.
+        \item \textbf{Nếu $M \neq N$:} bổ sung hàng/cột giả để thành ma trận vuông.
+    \end{itemize}
+    \begin{block}{Cách hoạt động}
+    \begin{enumerate}
+        \item \textbf{Giảm hàng:} trừ phần tử nhỏ nhất mỗi hàng.
+        \item \textbf{Giảm cột:} trừ phần tử nhỏ nhất mỗi cột.
+        \item \textbf{Phủ số 0:} dùng số đường thẳng tối thiểu để phủ hết các số 0.
+        \item Nếu chưa phủ đủ $n$ đường, điều chỉnh ma trận (trừ/cộng phần tử nhỏ nhất chưa phủ) và lặp.
+        \item \textbf{Chọn 0 độc lập:} mỗi hàng/cột chọn một số 0 $\rightarrow$ phép gán tối ưu.
+    \end{enumerate}
+    \end{block}
+    \textbf{Độ phức tạp:} $O(n^3)$, phù hợp thời gian thực.
+\end{frame}
+
 \begin{frame}[allowframebreaks]{Thuật toán ByteTrack}
     \textbf{Ý tưởng:} Tận dụng mọi detection, kể cả điểm tin cậy thấp.
     \begin{enumerate}
@@ -161,6 +201,19 @@
             \item \textbf{Stopline:} Tính khoảng cách tới vạch dừng để phát hiện cắt qua.
             \item \textbf{Hướng di chuyển:} So sánh vector chuyển động với vector tham chiếu để phân loại đi thẳng/rẽ.
         \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}{Hình học tính toán trong phát hiện vi phạm}
+    \begin{block}{Các phép kiểm tra chính}
+    \begin{itemize}
+        \item \textbf{Vượt đèn đỏ:} xe cắt \emph{stopline} khi tín hiệu \textbf{đỏ}.
+        \item \textbf{Đi sai làn:} vị trí tâm/điểm đáy xe nằm ngoài đa giác làn hợp lệ.
+        \item \textbf{Sai hướng:} góc giữa vector chuyển động và vector làn vượt ngưỡng.
+    \end{itemize}
+    \end{block}
+    \begin{block}{Đầu vào hình học}
+        ROI, đa giác làn, vạch dừng, hướng chuẩn được cấu hình theo camera.
     \end{block}
 \end{frame}
 %----------------------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-\chapter{Cơ sở lý thuyết: Phát hiện và theo dõi đối tượng}
+﻿\chapter{Cơ sở lý thuyết: Phát hiện và theo dõi đối tượng}
 \label{ch:ly_thuyet_detection}
 
 \section{Tổng quan về bài toán Phát hiện đối tượng}
@@ -297,7 +297,20 @@ Giá trị $C_{i,j}$ càng nhỏ đồng nghĩa với việc vùng bao dự đo�
 
 Để giải quyết bài toán tối ưu tổ hợp này, chúng tôi sử dụng \textbf{thuật toán Hungarian} (hay còn gọi là thuật toán Kuhn-Munkres). Thuật toán này đảm bảo tìm ra nghiệm tối ưu toàn cục với độ phức tạp thời gian là $O(n^3)$, hoàn toàn đáp ứng được yêu cầu xử lý thời gian thực của hệ thống.
 
-\subsection{Thuật toán ByteTrack}
+
+
+\subsubsection{Thuật toán Hungarian (Kuhn--Munkres)}
+Thuật toán Hungarian giải bài toán phân công tuyến tính bằng cách tìm một phép ghép 1-1 tối ưu giữa tập track và detection trên ma trận chi phí $C \in \mathbb{R}^{n \times n}$. Nếu ma trận không vuông ($M \neq N$) thì bổ sung hàng/cột giả để đưa về kích thước $n = \max(M, N)$; nếu cần cực đại hóa, chuyển sang cực tiểu hóa bằng $C' = C_{\max} - C$ hoặc dùng $-C$. \cite{kuhn1955hungarian}
+
+Quy trình chuẩn của thuật toán gồm các bước sau:
+\begin{enumerate}
+    \item \textbf{Giảm hàng}: trừ phần tử nhỏ nhất của mỗi hàng cho toàn bộ hàng.
+    \item \textbf{Giảm cột}: trừ phần tử nhỏ nhất của mỗi cột cho toàn bộ cột.
+    \item \textbf{Phủ các số 0}: dùng số đường thẳng tối thiểu (ngang/dọc) để phủ hết các số 0 trong ma trận.
+    \item Nếu số đường phủ bằng $n$, ta chọn tập số 0 sao cho mỗi hàng/cột chỉ chọn đúng một phần tử (tương ứng với phép gán tối ưu). Nếu chưa đủ, tìm phần tử nhỏ nhất chưa bị phủ là $m$, trừ $m$ cho mọi phần tử chưa phủ và cộng $m$ cho các phần tử ở giao điểm của hai đường phủ; sau đó lặp lại bước 3.
+\end{enumerate}
+
+Kết quả là ánh xạ ghép cặp tối ưu toàn cục với độ phức tạp $O(n^3)$, phù hợp cho bài toán theo dõi thời gian thực.\subsection{Thuật toán ByteTrack}
 Trong các phương pháp theo dõi đa đối tượng truyền thống (như DeepSORT hay SORT), một ngưỡng tin cậy (confidence threshold) cao thường được áp dụng để lọc bỏ các nhiễu nền (background noise). Ví dụ, chỉ những bounding box có điểm tin cậy $> 0.5$ mới được giữ lại để thực hiện liên kết. Tuy nhiên, trong bối cảnh giao thông thực tế, các đối tượng xe máy hoặc ô tô khi bị che khuất một phần (partial occlusion) hoặc bị mờ do chuyển động nhanh (motion blur) thường có điểm tin cậy giảm xuống thấp (ví dụ: $0.1 - 0.4$). Việc loại bỏ thẳng tay các detection này dẫn đến hệ quả là các quỹ đạo (tracks) bị đứt gãy, gây ra hiện tượng chuyển đổi ID (ID Switch) sai lệch.
 
 Để giải quyết vấn đề này, chúng tôi sử dụng ByteTrack (Zhang et al., 2022). Đây là một thuật toán tracking đơn giản nhưng hiệu quả vượt trội, dựa trên tư tưởng: \textit{"Tận dụng mọi detection, kể cả những detection có điểm tin cậy thấp, thay vì loại bỏ chúng"}.
@@ -445,3 +458,4 @@ Phân loại hướng di chuyển với ngưỡng \(50^\circ\):
   \caption{So sánh góc chuyển động $\vec v$ với góc tham chiếu $\vec r$ (ngưỡng $50^\circ$). Vùng màu xanh lá: đi thẳng, vùng ngoài: rẽ trái/phải.}
   \label{fig:direction_reference}
 \end{figure}
+

@@ -41,17 +41,18 @@
 \contentsline {subsubsection}{Quá trình Dự đoán (Prediction)}{10}{subsubsection*.14}%
 \contentsline {subsubsection}{Quá trình Cập nhật (Update)}{10}{subsubsection*.15}%
 \contentsline {subsection}{\numberline {2.4.2}Liên kết dữ liệu (Data Association)}{11}{subsection.2.4.2}%
-\contentsline {subsection}{\numberline {2.4.3}Thuật toán ByteTrack}{11}{subsection.2.4.3}%
-\contentsline {subsubsection}{Phân loại Detection}{12}{subsubsection*.17}%
-\contentsline {subsubsection}{Quy trình liên kết hai giai đoạn}{12}{subsubsection*.18}%
-\contentsline {subsubsection}{Quản lý vòng đời Track}{13}{subsubsection*.20}%
-\contentsline {subsubsection}{Ưu điểm đối với bài toán giao thông Việt Nam}{13}{subsubsection*.21}%
-\contentsline {section}{\numberline {2.5}Xử lý ảnh và Hình học tính toán}{13}{section.2.5}%
-\contentsline {subsection}{\numberline {2.5.1}Không gian màu HSV trong nhận diện tín hiệu đèn}{13}{subsection.2.5.1}%
+\contentsline {subsubsection}{Thuật toán Hungarian (Kuhn--Munkres)}{11}{subsubsection*.17}%
+\contentsline {subsection}{\numberline {2.4.3}Thuật toán ByteTrack}{12}{subsection.2.4.3}%
+\contentsline {subsubsection}{Phân loại Detection}{12}{subsubsection*.18}%
+\contentsline {subsubsection}{Quy trình liên kết hai giai đoạn}{12}{subsubsection*.19}%
+\contentsline {subsubsection}{Quản lý vòng đời Track}{13}{subsubsection*.21}%
+\contentsline {subsubsection}{Ưu điểm đối với bài toán giao thông Việt Nam}{13}{subsubsection*.22}%
+\contentsline {section}{\numberline {2.5}Xử lý ảnh và Hình học tính toán}{14}{section.2.5}%
+\contentsline {subsection}{\numberline {2.5.1}Không gian màu HSV trong nhận diện tín hiệu đèn}{14}{subsection.2.5.1}%
 \contentsline {subsection}{\numberline {2.5.2}Hình học tính toán trong phát hiện vi phạm}{14}{subsection.2.5.2}%
-\contentsline {subsubsection}{Kiểm tra xe trong làn đường}{14}{subsubsection*.22}%
-\contentsline {subsubsection}{Khoảng cách tới vạch dừng và sự kiện cắt qua}{14}{subsubsection*.23}%
-\contentsline {subsubsection}{Ước lượng hướng di chuyển dựa trên góc tham chiếu}{14}{subsubsection*.24}%
+\contentsline {subsubsection}{Kiểm tra xe trong làn đường}{14}{subsubsection*.23}%
+\contentsline {subsubsection}{Khoảng cách tới vạch dừng và sự kiện cắt qua}{15}{subsubsection*.24}%
+\contentsline {subsubsection}{Ước lượng hướng di chuyển dựa trên góc tham chiếu}{15}{subsubsection*.25}%
 \contentsline {chapter}{\numberline {3}Cơ sở lý thuyết: Nhận diện biển số xe}{16}{chapter.3}%
 \contentsline {section}{\numberline {3.1}Tổng quan về ALPR}{16}{section.3.1}%
 \contentsline {section}{\numberline {3.2}Biển số xe Việt Nam}{16}{section.3.2}%
@@ -61,26 +62,26 @@
 \contentsline {subsection}{\numberline {3.3.1}Giới thiệu PaddleOCR}{17}{subsection.3.3.1}%
 \contentsline {subsection}{\numberline {3.3.2}Pipeline nhận dạng văn bản trong PaddleOCR}{17}{subsection.3.3.2}%
 \contentsline {subsection}{\numberline {3.3.3}Rectification - Nắn thẳng biển số}{17}{subsection.3.3.3}%
-\contentsline {subsubsection}{Spatial Transformer Network (STN)}{17}{subsubsection*.30}%
-\contentsline {subsubsection}{Thin-Plate Spline (TPS) Transformation}{18}{subsubsection*.32}%
-\contentsline {subsubsection}{Ứng dụng trong PaddleOCR}{19}{subsubsection*.34}%
+\contentsline {subsubsection}{Spatial Transformer Network (STN)}{17}{subsubsection*.31}%
+\contentsline {subsubsection}{Thin-Plate Spline (TPS) Transformation}{18}{subsubsection*.33}%
+\contentsline {subsubsection}{Ứng dụng trong PaddleOCR}{19}{subsubsection*.35}%
 \contentsline {subsection}{\numberline {3.3.4}Kiến trúc SVTR - Scene Text Recognition}{19}{subsection.3.3.4}%
-\contentsline {subsubsection}{Ý tưởng chính của SVTR}{19}{subsubsection*.36}%
-\contentsline {subsubsection}{Cơ chế cắt Patch và trích xuất đặc trưng}{20}{subsubsection*.38}%
-\contentsline {subsubsection}{So sánh SVTR và CRNN}{20}{subsubsection*.41}%
+\contentsline {subsubsection}{Ý tưởng chính của SVTR}{19}{subsubsection*.37}%
+\contentsline {subsubsection}{Cơ chế cắt Patch và trích xuất đặc trưng}{20}{subsubsection*.39}%
+\contentsline {subsubsection}{So sánh SVTR và CRNN}{20}{subsubsection*.42}%
 \contentsline {subsection}{\numberline {3.3.5}Kiến trúc CRNN (Legacy)}{20}{subsection.3.3.5}%
 \contentsline {subsection}{\numberline {3.3.6}CTC Decoder - Giải mã chuỗi ký tự}{21}{subsection.3.3.6}%
-\contentsline {subsubsection}{Nguyên lý hoạt động}{21}{subsubsection*.44}%
-\contentsline {subsubsection}{Công thức xác suất CTC}{22}{subsubsection*.45}%
-\contentsline {subsubsection}{Greedy Decoding và Beam Search}{22}{subsubsection*.46}%
-\contentsline {subsubsection}{CTC Loss}{22}{subsubsection*.47}%
+\contentsline {subsubsection}{Nguyên lý hoạt động}{21}{subsubsection*.45}%
+\contentsline {subsubsection}{Công thức xác suất CTC}{22}{subsubsection*.46}%
+\contentsline {subsubsection}{Greedy Decoding và Beam Search}{22}{subsubsection*.47}%
+\contentsline {subsubsection}{CTC Loss}{22}{subsubsection*.48}%
 \contentsline {section}{\numberline {3.4}Tiền xử lý ảnh biển số}{22}{section.3.4}%
 \contentsline {subsection}{\numberline {3.4.1}CLAHE - Cân bằng histogram thích ứng}{22}{subsection.3.4.1}%
-\contentsline {subsubsection}{Nguyên lý hoạt động}{23}{subsubsection*.48}%
-\contentsline {subsubsection}{Công thức toán học}{23}{subsubsection*.49}%
+\contentsline {subsubsection}{Nguyên lý hoạt động}{23}{subsubsection*.49}%
+\contentsline {subsubsection}{Công thức toán học}{23}{subsubsection*.50}%
 \contentsline {subsection}{\numberline {3.4.2}Sharpening - Làm sắc nét}{23}{subsection.3.4.2}%
-\contentsline {subsubsection}{Kernel Sharpening}{23}{subsubsection*.50}%
-\contentsline {subsubsection}{Nguyên lý}{23}{subsubsection*.51}%
+\contentsline {subsubsection}{Kernel Sharpening}{23}{subsubsection*.51}%
+\contentsline {subsubsection}{Nguyên lý}{23}{subsubsection*.52}%
 \contentsline {subsection}{\numberline {3.4.3}Quy trình tiền xử lý hoàn chỉnh}{24}{subsection.3.4.3}%
 \contentsline {section}{\numberline {3.5}So sánh các phiên bản YOLOv8}{24}{section.3.5}%
 \contentsline {section}{\numberline {3.6}Cơ chế Validation \& Retry}{24}{section.3.6}%
@@ -92,12 +93,12 @@
 \contentsline {subsection}{\numberline {3.7.2}Logic hiệu chỉnh dựa trên định dạng}{25}{subsection.3.7.2}%
 \contentsline {section}{\numberline {3.8}Hai phương pháp triển khai ALPR}{26}{section.3.8}%
 \contentsline {subsection}{\numberline {3.8.1}Phương pháp 1: Two-Stage ALPR (Hai giai đoạn)}{26}{subsection.3.8.1}%
-\contentsline {subsubsection}{Kiến trúc}{26}{subsubsection*.55}%
-\contentsline {subsubsection}{Ưu điểm}{26}{subsubsection*.56}%
-\contentsline {subsubsection}{Nhược điểm}{26}{subsubsection*.57}%
+\contentsline {subsubsection}{Kiến trúc}{26}{subsubsection*.56}%
+\contentsline {subsubsection}{Ưu điểm}{26}{subsubsection*.57}%
+\contentsline {subsubsection}{Nhược điểm}{26}{subsubsection*.58}%
 \contentsline {subsection}{\numberline {3.8.2}Phương pháp 2: One-Stage Semi-supervised (Một giai đoạn)}{26}{subsection.3.8.2}%
-\contentsline {subsubsection}{Kiến trúc}{26}{subsubsection*.58}%
-\contentsline {subsubsection}{Quy trình gán nhãn bán giám sát (Semi-supervised)}{27}{subsubsection*.59}%
-\contentsline {subsubsection}{Ưu điểm}{27}{subsubsection*.60}%
-\contentsline {subsubsection}{Nhược điểm}{27}{subsubsection*.61}%
+\contentsline {subsubsection}{Kiến trúc}{26}{subsubsection*.59}%
+\contentsline {subsubsection}{Quy trình gán nhãn bán giám sát (Semi-supervised)}{27}{subsubsection*.60}%
+\contentsline {subsubsection}{Ưu điểm}{27}{subsubsection*.61}%
+\contentsline {subsubsection}{Nhược điểm}{27}{subsubsection*.62}%
 \contentsline {subsection}{\numberline {3.8.3}So sánh hai phương pháp}{27}{subsection.3.8.3}%

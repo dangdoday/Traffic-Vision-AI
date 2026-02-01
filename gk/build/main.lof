@@ -3,16 +3,16 @@
 \addvspace {10\p@ }
 \contentsline {figure}{\numberline {2.1}{\ignorespaces Cơ chế chia lưới và biểu diễn đầu ra của YOLO}}{6}{figure.caption.7}%
 \contentsline {figure}{\numberline {2.2}{\ignorespaces Chu trình hoạt động của Bộ lọc Kalman}}{10}{figure.caption.16}%
-\contentsline {figure}{\numberline {2.3}{\ignorespaces Minh họa quy trình liên kết hai giai đoạn của ByteTrack}}{13}{figure.caption.19}%
-\contentsline {figure}{\numberline {2.4}{\ignorespaces So sánh góc chuyển động $\vec v$ với góc tham chiếu $\vec r$ (ngưỡng $50^\circ $). Vùng màu xanh lá: đi thẳng, vùng ngoài: rẽ trái/phải.}}{15}{figure.caption.25}%
+\contentsline {figure}{\numberline {2.3}{\ignorespaces Minh họa quy trình liên kết hai giai đoạn của ByteTrack}}{13}{figure.caption.20}%
+\contentsline {figure}{\numberline {2.4}{\ignorespaces So sánh góc chuyển động $\vec v$ với góc tham chiếu $\vec r$ (ngưỡng $50^\circ $). Vùng màu xanh lá: đi thẳng, vùng ngoài: rẽ trái/phải.}}{15}{figure.caption.26}%
 \addvspace {10\p@ }
-\contentsline {figure}{\numberline {3.1}{\ignorespaces Pipeline tổng quan của hệ thống ALPR}}{16}{figure.caption.26}%
-\contentsline {figure}{\numberline {3.2}{\ignorespaces Pipeline nhận dạng văn bản trong PaddleOCR}}{17}{figure.caption.28}%
-\contentsline {figure}{\numberline {3.3}{\ignorespaces Minh họa quá trình Rectification biển số xe}}{18}{figure.caption.29}%
-\contentsline {figure}{\numberline {3.4}{\ignorespaces Kiến trúc Spatial Transformer Network}}{18}{figure.caption.31}%
-\contentsline {figure}{\numberline {3.5}{\ignorespaces TPS transformation nắn thẳng văn bản cong}}{19}{figure.caption.33}%
-\contentsline {figure}{\numberline {3.6}{\ignorespaces Kiến trúc tổng quan của SVTR (nguồn: Du et al., 2022)}}{19}{figure.caption.35}%
-\contentsline {figure}{\numberline {3.7}{\ignorespaces Kiến trúc SVTR trong PaddleOCR}}{20}{figure.caption.37}%
-\contentsline {figure}{\numberline {3.8}{\ignorespaces So sánh Local Mixing và Global Mixing trong SVTR}}{20}{figure.caption.39}%
-\contentsline {figure}{\numberline {3.9}{\ignorespaces Minh họa cắt ảnh thành các lát dọc trong SVTR}}{21}{figure.caption.40}%
-\contentsline {figure}{\numberline {3.10}{\ignorespaces Kiến trúc CRNN cho OCR trong PaddleOCR}}{21}{figure.caption.43}%
+\contentsline {figure}{\numberline {3.1}{\ignorespaces Pipeline tổng quan của hệ thống ALPR}}{16}{figure.caption.27}%
+\contentsline {figure}{\numberline {3.2}{\ignorespaces Pipeline nhận dạng văn bản trong PaddleOCR}}{17}{figure.caption.29}%
+\contentsline {figure}{\numberline {3.3}{\ignorespaces Minh họa quá trình Rectification biển số xe}}{18}{figure.caption.30}%
+\contentsline {figure}{\numberline {3.4}{\ignorespaces Kiến trúc Spatial Transformer Network}}{18}{figure.caption.32}%
+\contentsline {figure}{\numberline {3.5}{\ignorespaces TPS transformation nắn thẳng văn bản cong}}{19}{figure.caption.34}%
+\contentsline {figure}{\numberline {3.6}{\ignorespaces Kiến trúc tổng quan của SVTR (nguồn: Du et al., 2022)}}{19}{figure.caption.36}%
+\contentsline {figure}{\numberline {3.7}{\ignorespaces Kiến trúc SVTR trong PaddleOCR}}{20}{figure.caption.38}%
+\contentsline {figure}{\numberline {3.8}{\ignorespaces So sánh Local Mixing và Global Mixing trong SVTR}}{20}{figure.caption.40}%
+\contentsline {figure}{\numberline {3.9}{\ignorespaces Minh họa cắt ảnh thành các lát dọc trong SVTR}}{21}{figure.caption.41}%
+\contentsline {figure}{\numberline {3.10}{\ignorespaces Kiến trúc CRNN cho OCR trong PaddleOCR}}{21}{figure.caption.44}%
