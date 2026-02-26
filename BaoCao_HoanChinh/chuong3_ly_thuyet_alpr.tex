@@ -67,10 +67,281 @@ Việc nhận diện biển số Việt Nam gặp một số thách thức đặ
 \section{PaddleOCR - Nhận dạng ký tự}
 
 \subsection{Giới thiệu PaddleOCR}
-PaddleOCR là một bộ công cụ OCR mã nguồn mở được phát triển bởi PaddlePaddle (Baidu). PaddleOCR hỗ trợ nhận dạng văn bản đa ngôn ngữ với độ chính xác cao và tốc độ xử lý nhanh, phù hợp cho các ứng dụng thời gian thực.
+PaddleOCR là một bộ công cụ OCR mã nguồn mở được phát triển bởi PaddlePaddle (Baidu). Trong dự án này, chúng tôi sử dụng \textbf{PaddleOCR phiên bản 2.7.x} (tương ứng với PP-OCRv4). PaddleOCR hỗ trợ nhận dạng văn bản đa ngôn ngữ (hơn 80 ngôn ngữ) với độ chính xác cao và tốc độ xử lý nhanh, phù hợp cho các ứng dụng thời gian thực. 
 
-\subsection{Kiến trúc CRNN}
-PaddleOCR sử dụng kiến trúc CRNN (Convolutional Recurrent Neural Network) bao gồm:
+Trong đề tài này, chúng tôi sử dụng PaddleOCR với tham số \texttt{use\_textline\_orientation=True} để tự động phát hiện và xoay văn bản nghiêng, kết hợp với \texttt{lang='en'} cho bộ ký tự Latin (phù hợp với biển số Việt Nam).
+
+\subsection{Pipeline nhận dạng văn bản trong PaddleOCR}
+
+PaddleOCR sử dụng một pipeline hoàn chỉnh để nhận dạng văn bản, bao gồm các bước chính:
+
+\begin{figure}[!htbp]
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.8cm,
+        box/.style={rectangle, draw, rounded corners, minimum width=2cm, minimum height=0.8cm, align=center, fill=blue!10, font=\footnotesize},
+        arrow/.style={->, thick, >=stealth}
+    ]
+        \node[box] (input) {Ảnh biển số\\(nghiêng/cong)};
+        \node[box, right=of input] (rect) {Rectification\\(STN/TPS)};
+        \node[box, right=of rect] (backbone) {Feature\\Extraction};
+        \node[box, right=of backbone] (seq) {Sequence\\Modeling};
+        \node[box, right=of seq] (ctc) {CTC\\Decoder};
+        \node[box, right=of ctc] (output) {``30G07784''};
+
+        \draw[arrow] (input) -- (rect);
+        \draw[arrow] (rect) -- (backbone);
+        \draw[arrow] (backbone) -- (seq);
+        \draw[arrow] (seq) -- (ctc);
+        \draw[arrow] (ctc) -- (output);
+    \end{tikzpicture}
+    \caption{Pipeline nhận dạng văn bản trong PaddleOCR}
+    \label{fig:paddleocr_pipeline}
+\end{figure}
+
+%============================================================
+% SUBSECTION: RECTIFICATION
+%============================================================
+\subsection{Rectification - Nắn thẳng biển số}
+
+Biển số xe trong thực tế thường bị nghiêng, xoay hoặc biến dạng do góc chụp camera. Để cải thiện độ chính xác nhận dạng, PaddleOCR sử dụng module \textbf{Rectification} để tự động nắn thẳng ảnh văn bản trước khi đưa vào mô hình nhận dạng.
+
+\subsubsection{Spatial Transformer Network (STN)}
+STN (Spatial Transformer Network) \cite{jaderberg2015spatial} là một module học sâu cho phép mạng neural tự động học cách biến đổi không gian của ảnh đầu vào. STN bao gồm 3 thành phần:
+
+\begin{enumerate}
+    \item \textbf{Localization Network:} Mạng CNN nhỏ học các tham số biến đổi $\theta$ từ ảnh đầu vào
+    \item \textbf{Grid Generator:} Tạo lưới tọa độ cho ảnh output dựa trên $\theta$
+    \item \textbf{Sampler:} Lấy mẫu pixel từ ảnh gốc theo lưới tọa độ đã tính
+\end{enumerate}
+
+\begin{figure}[!htbp]
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.6cm,
+        box/.style={rectangle, draw, rounded corners, minimum width=1.8cm, minimum height=0.7cm, align=center, fill=orange!15, font=\footnotesize},
+        arrow/.style={->, thick, >=stealth}
+    ]
+        \node[box] (input) {Ảnh nghiêng\\$I$};
+        \node[box, right=of input] (loc) {Localization\\Network};
+        \node[box, right=of loc] (theta) {Tham số\\$\theta$};
+        \node[box, right=of theta] (grid) {Grid\\Generator};
+        \node[box, right=of grid] (sample) {Sampler};
+        \node[box, right=of sample] (output) {Ảnh thẳng\\$I'$};
+
+        \draw[arrow] (input) -- (loc);
+        \draw[arrow] (loc) -- (theta);
+        \draw[arrow] (theta) -- (grid);
+        \draw[arrow] (grid) -- (sample);
+        \draw[arrow] (sample) -- (output);
+        \draw[arrow, dashed] (input) to[bend right=30] (sample);
+    \end{tikzpicture}
+    \caption{Kiến trúc Spatial Transformer Network}
+    \label{fig:stn_arch}
+\end{figure}
+
+\textbf{Phép biến đổi Affine:}
+Với phép biến đổi affine 2D, ma trận tham số $\theta$ có dạng:
+\begin{equation}
+    \theta = \begin{bmatrix}
+        \theta_{11} & \theta_{12} & \theta_{13} \\
+        \theta_{21} & \theta_{22} & \theta_{23}
+    \end{bmatrix}
+\end{equation}
+
+Tọa độ điểm $(x_i^s, y_i^s)$ trong ảnh nguồn được tính từ tọa độ $(x_i^t, y_i^t)$ trong ảnh đích:
+\begin{equation}
+    \begin{pmatrix} x_i^s \\ y_i^s \end{pmatrix} = \begin{bmatrix}
+        \theta_{11} & \theta_{12} & \theta_{13} \\
+        \theta_{21} & \theta_{22} & \theta_{23}
+    \end{bmatrix} \begin{pmatrix} x_i^t \\ y_i^t \\ 1 \end{pmatrix}
+\end{equation}
+
+Phép biến đổi affine có thể biểu diễn: xoay (rotation), co giãn (scale), dịch chuyển (translation), và nghiêng (shear).
+
+\subsubsection{Thin-Plate Spline (TPS) Transformation}
+Đối với văn bản bị uốn cong (curved text), phép biến đổi affine không đủ linh hoạt. PaddleOCR sử dụng \textbf{TPS (Thin-Plate Spline)} \cite{shi2016robust} để xử lý các biến dạng phi tuyến tính phức tạp hơn.
+
+TPS sử dụng một tập các điểm điều khiển (control points) $\{(x_k, y_k)\}_{k=1}^{K}$ để định nghĩa phép biến đổi. Công thức TPS:
+\begin{equation}
+    f(x, y) = a_0 + a_x x + a_y y + \sum_{k=1}^{K} w_k \cdot U(||(x, y) - (x_k, y_k)||)
+\end{equation}
+
+Trong đó:
+\begin{itemize}
+    \item $a_0, a_x, a_y$: Các tham số affine
+    \item $w_k$: Trọng số của điểm điều khiển thứ $k$
+    \item $U(r) = r^2 \log(r)$: Hàm cơ sở radial basis function (RBF)
+    \item $K$: Số điểm điều khiển (thường $K = 20$ trong PaddleOCR)
+\end{itemize}
+
+\begin{figure}[!htbp]
+    \centering
+    \begin{tikzpicture}[scale=0.9]
+        % Input curved text
+        \draw[thick, blue] (0,0) .. controls (0.5,0.8) and (1.5,0.8) .. (2,0) 
+                           .. controls (2.5,-0.3) and (3.5,-0.3) .. (4,0);
+        \node at (2,-0.8) {Văn bản cong (input)};
+        
+        % Arrow
+        \draw[->, very thick] (4.5,0) -- (5.5,0);
+        \node at (5,0.4) {TPS};
+        
+        % Output straight text
+        \draw[thick, green!60!black] (6,0) -- (10,0);
+        \node at (8,-0.8) {Văn bản thẳng (output)};
+        
+        % Control points on curved
+        \foreach \x in {0,0.8,1.6,2.4,3.2,4}
+            \fill[red] (\x,{0.4*sin(\x*90)}) circle (2pt);
+        
+        % Control points on straight
+        \foreach \x in {6,6.8,7.6,8.4,9.2,10}
+            \fill[red] (\x,0) circle (2pt);
+    \end{tikzpicture}
+    \caption{TPS transformation nắn thẳng văn bản cong}
+    \label{fig:tps_transform}
+\end{figure}
+
+\subsubsection{Ứng dụng trong PaddleOCR}
+Khi khởi tạo PaddleOCR với \texttt{use\_textline\_orientation=True}:
+\begin{itemize}
+    \item Mô hình tự động phát hiện hướng của văn bản
+    \item Áp dụng phép xoay để đưa văn bản về hướng ngang
+    \item Với văn bản nghiêng/cong, module TPS được kích hoạt để nắn thẳng
+    \item Ảnh đã được rectified được đưa vào mô hình nhận dạng chính
+\end{itemize}
+
+%============================================================
+% SUBSECTION: SVTR ARCHITECTURE
+%============================================================
+\subsection{Kiến trúc SVTR - Scene Text Recognition}
+
+Từ phiên bản PP-OCRv3, PaddleOCR đã chuyển từ kiến trúc CRNN truyền thống sang \textbf{SVTR} (Single Visual model for Scene Text Recognition) \cite{du2022svtr}. SVTR là một kiến trúc hiệu quả hơn, sử dụng hoàn toàn cơ chế attention thay vì RNN.
+
+\subsubsection{Ý tưởng chính của SVTR}
+SVTR xử lý ảnh văn bản bằng cách:
+\begin{enumerate}
+    \item \textbf{Patch Embedding:} Chia ảnh thành các patch nhỏ (character components)
+    \item \textbf{Hierarchical Mixing:} Trộn thông tin qua nhiều tầng với local và global attention
+    \item \textbf{Linear Prediction:} Dự đoán ký tự trực tiếp từ feature cuối
+\end{enumerate}
+
+\begin{figure}[!htbp]
+    \centering
+    \begin{tikzpicture}[
+        node distance=0.5cm,
+        patch/.style={rectangle, draw, minimum width=0.4cm, minimum height=0.6cm, fill=yellow!30},
+        box/.style={rectangle, draw, rounded corners, minimum width=2cm, minimum height=0.7cm, align=center, fill=green!15, font=\footnotesize},
+        arrow/.style={->, thick, >=stealth}
+    ]
+        % Input image with patches
+        \node[box, minimum width=3cm] (input) {Ảnh biển số\\$H \times W \times 3$};
+        
+        % Patch embedding
+        \node[box, right=0.8cm of input] (patch) {Patch Embedding\\$\frac{H}{4} \times \frac{W}{4} \times D$};
+        
+        % Mixing stages
+        \node[box, right=0.8cm of patch, fill=blue!15] (local) {Local\\Mixing};
+        \node[box, right=0.5cm of local, fill=blue!15] (global) {Global\\Mixing};
+        \node[box, right=0.5cm of global, fill=blue!15] (merge) {Merging\\Stage};
+        
+        % Output
+        \node[box, right=0.8cm of merge, fill=red!15] (pred) {CTC/Attn\\Decoder};
+        \node[box, right=0.5cm of pred] (output) {``30G07784''};
+
+        \draw[arrow] (input) -- (patch);
+        \draw[arrow] (patch) -- (local);
+        \draw[arrow] (local) -- (global);
+        \draw[arrow] (global) -- (merge);
+        \draw[arrow] (merge) -- (pred);
+        \draw[arrow] (pred) -- (output);
+    \end{tikzpicture}
+    \caption{Kiến trúc SVTR trong PaddleOCR}
+    \label{fig:svtr_arch}
+\end{figure}
+
+\subsubsection{Cơ chế cắt Patch và trích xuất đặc trưng}
+
+SVTR xử lý ảnh văn bản giống như Vision Transformer (ViT), nhưng được tối ưu cho văn bản:
+
+\textbf{Bước 1 - Patch Embedding:}
+\begin{itemize}
+    \item Ảnh đầu vào kích thước $H \times W \times 3$ được chia thành các patch kích thước $4 \times 4$
+    \item Mỗi patch được flatten và chiếu lên không gian $D$ chiều
+    \item Kết quả: chuỗi $T = \frac{H}{4} \times \frac{W}{4}$ token, mỗi token là vector $D$ chiều
+\end{itemize}
+
+\textbf{Bước 2 - Local Mixing (Intra-character):}
+\begin{itemize}
+    \item Học các đặc trưng \textbf{bên trong} từng ký tự (nét, đường cong, góc)
+    \item Sử dụng window-based self-attention với window size nhỏ
+    \item Cho phép các patch lân cận trao đổi thông tin
+\end{itemize}
+
+\textbf{Bước 3 - Global Mixing (Inter-character):}
+\begin{itemize}
+    \item Học mối quan hệ \textbf{giữa các ký tự} (ngữ cảnh)
+    \item Sử dụng global self-attention trên toàn bộ chuỗi
+    \item Giúp phân biệt các ký tự giống nhau dựa trên ngữ cảnh
+\end{itemize}
+
+\textbf{Bước 4 - Height Merging:}
+\begin{itemize}
+    \item Gộp các token theo chiều cao để tạo chuỗi 1D
+    \item Giảm từ $\frac{H}{4} \times \frac{W}{4}$ thành $1 \times \frac{W}{4}$ token
+    \item Mỗi token đại diện cho một ``lát cắt'' dọc của ảnh
+\end{itemize}
+
+\begin{figure}[!htbp]
+    \centering
+    \begin{tikzpicture}[scale=0.8]
+        % License plate image
+        \draw[thick] (0,0) rectangle (8,1.5);
+        \node at (4,0.75) {\textbf{3 0 G 0 7 7 8 4}};
+        
+        % Vertical slices
+        \foreach \x in {0,1,...,8} {
+            \draw[dashed, gray] (\x,0) -- (\x,1.5);
+        }
+        
+        % Labels
+        \node at (4,-0.5) {Ảnh biển số được chia thành các ``lát cắt'' dọc};
+        
+        % Feature vectors below
+        \foreach \x in {0.5,1.5,...,7.5} {
+            \draw[->] (\x,0) -- (\x,-0.3);
+        }
+        \node at (4,-1) {$\downarrow$ mỗi lát $\rightarrow$ vector đặc trưng $D$ chiều};
+    \end{tikzpicture}
+    \caption{Minh họa cắt ảnh thành các lát dọc trong SVTR}
+    \label{fig:svtr_slices}
+\end{figure}
+
+\subsubsection{So sánh SVTR và CRNN}
+
+\begin{table}[!ht]
+\centering
+\caption{So sánh kiến trúc SVTR và CRNN}
+\label{tab:svtr_vs_crnn}
+\begin{tabular}{|l|p{5cm}|p{5cm}|}
+\hline
+\textbf{Tiêu chí} & \textbf{CRNN} & \textbf{SVTR} \\ \hline
+Trích xuất đặc trưng & CNN (ResNet, MobileNet) & Patch Embedding + Transformer \\ \hline
+Mô hình hóa chuỗi & Bidirectional LSTM & Self-Attention (Local + Global) \\ \hline
+Tính toán & Tuần tự (chậm hơn) & Song song (nhanh hơn) \\ \hline
+Ngữ cảnh & Hạn chế bởi hidden size LSTM & Toàn cục qua attention \\ \hline
+Độ chính xác & Tốt & Cao hơn 1-2\% \\ \hline
+\end{tabular}
+\end{table}
+
+%============================================================
+% SUBSECTION: CRNN ARCHITECTURE (Legacy)
+%============================================================
+\subsection{Kiến trúc CRNN (Legacy)}
+
+Mặc dù SVTR là mặc định trong các phiên bản mới, PaddleOCR vẫn hỗ trợ kiến trúc CRNN truyền thống. CRNN (Convolutional Recurrent Neural Network) bao gồm:
+
 \begin{enumerate}
     \item \textbf{CNN Backbone:} Trích xuất đặc trưng không gian từ ảnh đầu vào. Backbone thường sử dụng là MobileNet hoặc ResNet biến thể.
     \item \textbf{Sequence Modeling (LSTM):} Mô hình hóa quan hệ tuần tự giữa các ký tự. Sử dụng Bidirectional LSTM để capture thông tin từ cả hai hướng.
@@ -95,19 +366,44 @@ PaddleOCR sử dụng kiến trúc CRNN (Convolutional Recurrent Neural Network)
         \draw[arrow] (lstm) -- (ctc);
         \draw[arrow] (ctc) -- (output);
     \end{tikzpicture}
-    \caption{Kiến trúc CRNN cho OCR\\trong PaddleOCR}
+    \caption{Kiến trúc CRNN cho OCR trong PaddleOCR}
     \label{fig:crnn_arch}
 \end{figure}
 
-\subsection{CTC Loss}
-CTC (Connectionist Temporal Classification) cho phép huấn luyện mà không cần alignment giữa input và output. Đây là đặc điểm quan trọng vì ta không biết chính xác vị trí của từng ký tự trên ảnh.
+%============================================================
+% SUBSECTION: CTC DECODER
+%============================================================
+\subsection{CTC Decoder - Giải mã chuỗi ký tự}
 
+CTC (Connectionist Temporal Classification) là phương pháp giải mã cho phép huấn luyện mà không cần alignment giữa input và output. Đây là đặc điểm quan trọng vì ta không biết chính xác vị trí của từng ký tự trên ảnh.
+
+\subsubsection{Nguyên lý hoạt động}
+Sau khi đi qua backbone (SVTR hoặc CRNN), mỗi ``lát cắt'' dọc của ảnh được biểu diễn bằng một vector xác suất trên tập ký tự (bao gồm cả ký tự đặc biệt ``blank'' $\epsilon$).
+
+\textbf{Ví dụ:} Với ảnh biển số ``30G'', output của mô hình có thể là:
+\begin{center}
+\begin{tabular}{|c|c|c|c|c|c|c|c|}
+\hline
+Lát & 1 & 2 & 3 & 4 & 5 & 6 & 7 \\ \hline
+Output & 3 & 3 & $\epsilon$ & 0 & $\epsilon$ & G & G \\ \hline
+\end{tabular}
+\end{center}
+
+Sau khi áp dụng CTC collapse (loại bỏ lặp và blank): ``33-0-GG'' $\rightarrow$ ``30G''
+
+\subsubsection{Công thức xác suất CTC}
 Xác suất của một chuỗi output $\mathbf{l}$ được tính:
 \begin{equation}
     P(\mathbf{l} | \mathbf{x}) = \sum_{\pi \in \mathcal{B}^{-1}(\mathbf{l})} P(\pi | \mathbf{x})
 \end{equation}
 
-Trong đó $\mathcal{B}^{-1}(\mathbf{l})$ là tập tất cả các path có thể tạo ra $\mathbf{l}$ sau khi loại bỏ ký tự blank và ký tự lặp.
+Trong đó:
+\begin{itemize}
+    \item $\mathbf{x}$: Chuỗi feature vectors (từ các lát cắt)
+    \item $\mathbf{l}$: Chuỗi ký tự mục tiêu (VD: ``30G07784'')
+    \item $\pi$: Một alignment path (VD: ``3-3-0-0-G-G-0-...'')
+    \item $\mathcal{B}^{-1}(\mathbf{l})$: Tập tất cả các path có thể tạo ra $\mathbf{l}$ sau khi loại bỏ ký tự blank và ký tự lặp
+\end{itemize}
 
 \textbf{Ví dụ:} Với chuỗi mục tiêu ``AB'', các path hợp lệ có thể là:
 \begin{itemize}
@@ -116,10 +412,30 @@ Trong đó $\mathcal{B}^{-1}(\mathbf{l})$ là tập tất cả các path có th�
     \item ``-A-B-'' $\rightarrow$ ``AB''
 \end{itemize}
 
+\subsubsection{Greedy Decoding và Beam Search}
+Trong inference, CTC decoder sử dụng:
+
+\textbf{Greedy Decoding (mặc định):}
+\begin{itemize}
+    \item Tại mỗi timestep, chọn ký tự có xác suất cao nhất
+    \item Sau đó áp dụng collapse rule
+    \item Nhanh nhưng có thể bỏ lỡ kết quả tối ưu toàn cục
+\end{itemize}
+
+\textbf{Beam Search:}
+\begin{itemize}
+    \item Duy trì $k$ hypotheses tốt nhất tại mỗi bước
+    \item Cộng dồn log-probability của các ký tự
+    \item Chính xác hơn nhưng chậm hơn
+\end{itemize}
+
+\subsubsection{CTC Loss}
 CTC Loss được tính bằng negative log-likelihood:
 \begin{equation}
     \mathcal{L}_{CTC} = -\log P(\mathbf{l} | \mathbf{x})
 \end{equation}
+
+Để tính toán hiệu quả, sử dụng thuật toán forward-backward tương tự HMM.
 
 \section{Tiền xử lý ảnh biển số}
 

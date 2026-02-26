@@ -220,6 +220,84 @@
 %   PHẦN 3: NHẬN DIỆN BIỂN SỐ XE (ALPR)
 %----------------------------------------------------------------------------------------
 \section{Cơ sở lý thuyết: Nhận diện biển số xe}
+
+\begin{frame}{Phát biểu bài toán ALPR}
+    \textbf{Định nghĩa:} Trích xuất tự động chuỗi ký tự từ biển số xe trong ảnh/video
+    
+    \begin{block}{Input/Output}
+    \begin{itemize}
+        \item \textbf{Input:} Ảnh RGB chứa phương tiện, biển số $\geq 50 \times 15$ pixels
+        \item \textbf{Output:} Bounding box biển số + Chuỗi 7-9 ký tự + Confidence
+    \end{itemize}
+    \end{block}
+    
+    \begin{block}{Ý nghĩa thực tiễn tại Việt Nam}
+    \begin{itemize}
+        \item Thu phí tự động (ETC): giảm thời gian từ 30-60s xuống 2-3s
+        \item Quản lý bãi đỗ xe: tự động hóa, giảm 70-80\% nhân sự
+        \item Camera phạt nguội: ghi nhận vi phạm tự động
+        \item Kiểm soát an ninh: phát hiện xe trong danh sách nghi vấn
+    \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}[allowframebreaks]{Thách thức nhận diện biển số Việt Nam}
+    \textbf{1. Thách thức về dữ liệu:}
+    \begin{itemize}
+        \item Đa dạng định dạng (1 dòng, 2 dòng, xe máy, ô tô)
+        \item Dữ liệu không cân bằng: xe máy chiếm >70\% dòng xe
+        \item Thiếu dataset gán nhãn chất lượng cao
+    \end{itemize}
+    
+    \textbf{2. Thách thức về chất lượng ảnh:}
+    \begin{itemize}
+        \item Độ phân giải thấp từ camera giám sát
+        \item Motion blur khi xe di chuyển nhanh
+        \item Biển số bẩn, rỉ sét, bị che khuất
+        \item Điều kiện ánh sáng: ban đêm, ngược sáng, phản chiếu
+    \end{itemize}
+    
+    \framebreak
+    
+    \textbf{3. Thách thức về kỹ thuật:}
+    \begin{itemize}
+        \item Yêu cầu real-time: 25-30 FPS
+        \item Ký tự dễ nhầm lẫn: 0/O, 1/I, 8/B, 5/S
+        \item Biến dạng góc nhìn (perspective distortion)
+    \end{itemize}
+    
+    \textbf{4. Thách thức triển khai:}
+    \begin{itemize}
+        \item Cân bằng accuracy vs speed trên phần cứng phổ thông
+        \item Tích hợp với detection, tracking, violation trong pipeline
+        \item Xử lý đa frame: cần cơ chế voting/validation
+    \end{itemize}
+\end{frame}
+
+\begin{frame}{So sánh các công cụ OCR}
+    \begin{table}
+    \centering
+    \footnotesize
+    \begin{tabular}{|l|c|c|c|c|}
+    \hline
+    \textbf{Tiêu chí} & \textbf{Tesseract} & \textbf{EasyOCR} & \textbf{TrOCR} & \textbf{PaddleOCR} \\ \hline
+    Accuracy & TB & Khá & Cao & Cao \\ \hline
+    Speed & Chậm & TB & Chậm & Nhanh \\ \hline
+    Model size & Nhỏ & Lớn & Rất lớn & Nhỏ \\ \hline
+    Text nghiêng & Kém & TB & Khá & Tốt (TPS) \\ \hline
+    Real-time & Không & Hạn chế & Không & \textbf{Có} \\ \hline
+    \end{tabular}
+    \end{table}
+    
+    \vspace{0.5em}
+    \textbf{Lý do chọn PaddleOCR:}
+    \begin{itemize}
+        \item Cân bằng accuracy-speed tốt nhất
+        \item Tích hợp rectification (STN/TPS) cho text nghiêng
+        \item Model nhẹ (~12MB), hỗ trợ CPU/GPU/TensorRT
+    \end{itemize}
+\end{frame}
+
 \begin{frame}{Tiền xử lý ảnh biển số}
     \textbf{Mục đích:} Cải thiện chất lượng ảnh trước khi OCR
     
@@ -456,4 +534,51 @@
     \end{table}
 
     \textit{Tuỳ nhu cầu: cân bằng độ phức tạp và tính tích hợp.}
+\end{frame}
+\begin{frame}{Hyperparameters quan trọng}
+    \begin{block}{Plate Detection (YOLOv8)}
+    \begin{itemize}
+        \item \textbf{Confidence threshold:} 0.5-0.6 (trade-off precision/recall)
+        \item \textbf{Image size:} 640 (nhanh) vs 1280 (phát hiện xa tốt hơn)
+        \item \textbf{IOU threshold:} Ảnh hưởng NMS
+    \end{itemize}
+    \end{block}
+    
+    \begin{block}{Tiền xử lý (CLAHE)}
+    \begin{itemize}
+        \item \textbf{clipLimit:} 2.0-4.0 (cao hơn $\rightarrow$ contrast mạnh + nhiễu)
+        \item \textbf{tileGridSize:} (8,8) chuẩn, cân bằng detail/smooth
+    \end{itemize}
+    \end{block}
+    
+    \begin{block}{OCR (PaddleOCR)}
+    \begin{itemize}
+        \item \textbf{det\_db\_thresh:} Ngưỡng text detection
+        \item \textbf{rec\_conf\_threshold:} Lọc kết quả chất lượng thấp
+    \end{itemize}
+    \end{block}
+\end{frame}
+
+\begin{frame}{Phương pháp đánh giá ALPR}
+    \begin{block}{Metrics cho Detection}
+    \begin{itemize}
+        \item \textbf{mAP@0.5:} Average Precision tại IoU=0.5 (mục tiêu $\geq$ 90\%)
+        \item \textbf{Recall:} Tỷ lệ phát hiện đúng (mục tiêu $\geq$ 95\%)
+    \end{itemize}
+    \end{block}
+    
+    \begin{block}{Metrics cho OCR}
+    \begin{itemize}
+        \item \textbf{Character Accuracy (CA):} Tỷ lệ ký tự đúng (mục tiêu $\geq$ 95\%)
+        \item \textbf{Plate Recognition Rate (PRR):} 100\% ký tự đúng (mục tiêu $\geq$ 85\%)
+        \item \textbf{CER:} Character Error Rate (mục tiêu $\leq$ 5\%)
+    \end{itemize}
+    \end{block}
+    
+    \begin{block}{End-to-End}
+    \begin{itemize}
+        \item \textbf{E2E Accuracy:} Detect đúng \& OCR đúng (mục tiêu $\geq$ 80\%)
+        \item \textbf{FPS:} Frames per second (mục tiêu $\geq$ 20)
+    \end{itemize}
+    \end{block}
 \end{frame}
