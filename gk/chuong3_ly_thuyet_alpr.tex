@@ -1,6 +1,48 @@
 \chapter{Cơ sở lý thuyết: Nhận diện biển số xe}
 \label{ch:ly_thuyet_alpr}
 
+\section{Phát biểu bài toán ALPR}
+
+\subsection{Định nghĩa bài toán}
+Nhận diện biển số xe tự động (Automatic License Plate Recognition - ALPR) là bài toán trích xuất thông tin ký tự từ biển số xe trong ảnh hoặc video một cách tự động. Đây là một bài toán con của nhận dạng ký tự quang học (OCR) được chuyên biệt hóa cho ngữ cảnh giao thông.
+
+\textbf{Phát biểu hình thức:} Cho một ảnh đầu vào $I \in \mathbb{R}^{H \times W \times 3}$ chứa phương tiện giao thông, hệ thống ALPR cần thực hiện:
+\begin{enumerate}
+    \item \textbf{Plate Detection:} Xác định vùng chứa biển số $R = (x, y, w, h)$ trong ảnh
+    \item \textbf{Character Recognition:} Nhận dạng chuỗi ký tự $S = (c_1, c_2, \dots, c_n)$ trên biển số
+\end{enumerate}
+
+\subsection{Đặc tả đầu vào/đầu ra}
+
+\begin{table}[!ht]
+\centering
+\caption{Đặc tả Input/Output của hệ thống ALPR}
+\label{tab:alpr_io_spec}
+\begin{tabular}{|l|p{10cm}|}
+\hline
+\textbf{Thành phần} & \textbf{Mô tả chi tiết} \\ \hline
+\multicolumn{2}{|c|}{\textbf{ĐẦU VÀO}} \\ \hline
+Ảnh/Frame video & Ảnh RGB kích thước $H \times W \times 3$, chứa ít nhất một phương tiện \\ \hline
+Độ phân giải tối thiểu & Biển số chiếm ít nhất $50 \times 15$ pixels trong ảnh \\ \hline
+Chất lượng & Ảnh không quá mờ (motion blur < 5px), độ sáng đủ \\ \hline
+\multicolumn{2}{|c|}{\textbf{ĐẦU RA}} \\ \hline
+Bounding box biển số & Tọa độ $(x, y, w, h)$ của vùng biển số trong ảnh \\ \hline
+Chuỗi ký tự & Chuỗi 7-9 ký tự (VD: ``30G07784'' hoặc ``29H1234.56'') \\ \hline
+Độ tin cậy & Confidence score $\in [0, 1]$ cho mỗi dự đoán \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{Ý nghĩa thực tiễn}
+Hệ thống ALPR có vai trò quan trọng trong nhiều ứng dụng thực tế tại Việt Nam:
+
+\begin{itemize}
+    \item \textbf{Thu phí tự động (ETC):} Giảm thời gian chờ tại trạm thu phí từ 30-60 giây xuống còn 2-3 giây, tăng lưu lượng thông qua 5-10 lần \cite{vtc2024etc}.
+    \item \textbf{Quản lý bãi đỗ xe:} Tự động hóa quy trình ra/vào, giảm nhân sự vận hành 70-80\%, tăng năng suất xử lý.
+    \item \textbf{Giám sát vi phạm:} Hỗ trợ camera phạt nguội ghi nhận biển số xe vi phạm, tăng tính răn đe và minh bạch.
+    \item \textbf{Kiểm soát an ninh:} Phát hiện xe đăng ký trong danh sách cấm/nghi vấn tại các cổng ra vào quan trọng.
+    \item \textbf{Thống kê giao thông:} Phân tích lưu lượng xe theo vùng, thời gian, hỗ trợ quy hoạch giao thông.
+\end{itemize}
+
 \section{Tổng quan về ALPR}
 Hệ thống nhận diện biển số xe tự động (Automatic License Plate Recognition - ALPR) thường bao gồm hai giai đoạn chính:
 \begin{enumerate}
@@ -56,13 +98,163 @@ Trong đó:
 \end{itemize}
 
 \subsection{Thách thức nhận diện biển số Việt Nam}
-Việc nhận diện biển số Việt Nam gặp một số thách thức đặc thù:
+Việc nhận diện biển số Việt Nam gặp một số thách thức đặc thù, được phân loại thành các nhóm sau:
+
+\subsubsection{Thách thức về dữ liệu}
 \begin{itemize}
-    \item \textbf{Đa dạng định dạng:} Biển số có thể là 1 dòng hoặc 2 dòng, với các kích thước khác nhau
-    \item \textbf{Font chữ đặc thù:} Font chữ trên biển số Việt Nam có một số điểm khác biệt
-    \item \textbf{Điều kiện thực tế:} Biển số thường bị bẩn, mờ, hoặc nghiêng do góc quay camera
-    \item \textbf{Ánh sáng:} Độ phản chiếu của biển số thay đổi theo điều kiện ánh sáng
+    \item \textbf{Đa dạng định dạng:} Biển số Việt Nam có nhiều định dạng khác nhau (1 dòng, 2 dòng), kích thước khác nhau giữa xe máy và ô tô, gây khó khăn cho việc chuẩn hóa đầu vào.
+    \item \textbf{Dữ liệu không cân bằng:} Trong thực tế, xe máy chiếm tỷ lệ lớn (>70\%) trong dòng giao thông Việt Nam, dẫn đến mất cân bằng lớp khi huấn luyện.
+    \item \textbf{Thiếu dữ liệu gán nhãn:} Việc gán nhãn ký tự trên biển số đòi hỏi thời gian và chi phí lớn, trong khi các bộ dữ liệu công khai cho biển số Việt Nam còn hạn chế.
 \end{itemize}
+
+\subsubsection{Thách thức về chất lượng ảnh}
+\begin{itemize}
+    \item \textbf{Độ phân giải thấp:} Camera giám sát thường có độ phân giải thấp, biển số có thể chỉ chiếm vài chục pixel.
+    \item \textbf{Motion blur:} Xe di chuyển nhanh gây nhòe ảnh, làm mất nét các ký tự.
+    \item \textbf{Biển số bị hư hỏng:} Biển số cũ, bị bẩn, rỉ sét, mờ chữ do thời tiết, hoặc bị che khuất một phần.
+    \item \textbf{Điều kiện ánh sáng:} Ánh sáng ban đêm, ngược sáng, phản chiếu từ mặt biển số kim loại gây khó khăn cho nhận dạng.
+\end{itemize}
+
+\begin{figure}[!htbp]
+    \centering
+    \begin{subfigure}[b]{0.3\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Figures/plate_perspective.jpg}
+        \caption{Biển số nghiêng}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[b]{0.3\textwidth}
+        \centering
+        \includegraphics[width=\textwidth]{Figures/plate_rectified.jpg}
+        \caption{Biển số rõ}
+    \end{subfigure}
+    \caption{Ví dụ về thách thức chất lượng ảnh biển số trong thực tế}
+    \label{fig:plate_challenges}
+\end{figure}
+
+\subsubsection{Thách thức về kỹ thuật}
+\begin{itemize}
+    \item \textbf{Yêu cầu thời gian thực:} Hệ thống giám sát giao thông cần xử lý 25-30 FPS, đặt ra yêu cầu về tốc độ inference của cả detection và OCR.
+    \item \textbf{Font chữ đặc thù:} Font chữ trên biển số Việt Nam có một số điểm khác biệt so với font chuẩn (ví dụ: số 0 và chữ O, số 1 và chữ I).
+    \item \textbf{Ký tự tương tự:} Một số cặp ký tự dễ nhầm lẫn: 0/O, 1/I, 8/B, 5/S, đòi hỏi cơ chế hiệu chỉnh hậu xử lý.
+    \item \textbf{Biến đổi góc nhìn:} Góc quay camera tạo ra biến dạng phối cảnh (perspective distortion), cần module rectification.
+\end{itemize}
+
+\subsubsection{Thách thức về triển khai}
+\begin{itemize}
+    \item \textbf{Tài nguyên tính toán:} Cần cân bằng giữa độ chính xác và tốc độ để triển khai trên phần cứng phổ thông (không có GPU mạnh).
+    \item \textbf{Tích hợp hệ thống:} ALPR cần tích hợp với các module khác (detection, tracking, violation detection) trong một pipeline hoàn chỉnh.
+    \item \textbf{Xử lý đa frame:} Một xe có thể xuất hiện trong nhiều frame, cần cơ chế voting/validation để có kết quả ổn định.
+\end{itemize}
+
+\section{Các phương pháp OCR hiện có cho ALPR}
+
+Trước khi trình bày chi tiết về PaddleOCR (phương pháp được lựa chọn), phần này tổng hợp và so sánh các công cụ OCR phổ biến có thể ứng dụng cho bài toán ALPR.
+
+\subsection{Tổng quan các công cụ OCR}
+
+\subsubsection{Tesseract OCR}
+Tesseract \cite{smith2007overview} là engine OCR mã nguồn mở lâu đời nhất (từ 1985, được Google phát triển từ 2006). Phiên bản 4.0+ sử dụng mạng LSTM cho nhận dạng text.
+
+\textbf{Ưu điểm:}
+\begin{itemize}
+    \item Miễn phí, mã nguồn mở, cộng đồng hỗ trợ lớn
+    \item Hỗ trợ nhiều ngôn ngữ (>100 ngôn ngữ)
+    \item Dễ tích hợp qua wrapper (pytesseract)
+\end{itemize}
+
+\textbf{Nhược điểm:}
+\begin{itemize}
+    \item Hiệu năng kém với ảnh nhiễu, mờ, nghiêng
+    \item Yêu cầu tiền xử lý ảnh phức tạp (binarization, deskew)
+    \item Tốc độ chậm so với các giải pháp deep learning hiện đại
+    \item Không có module rectification tích hợp
+\end{itemize}
+
+\subsubsection{EasyOCR}
+EasyOCR \cite{easyocr2020} là thư viện Python dựa trên PyTorch, sử dụng kiến trúc CRNN + CTC cho nhận dạng văn bản.
+
+\textbf{Ưu điểm:}
+\begin{itemize}
+    \item API đơn giản, dễ sử dụng
+    \item Hỗ trợ 80+ ngôn ngữ
+    \item Tích hợp sẵn text detection và recognition
+\end{itemize}
+
+\textbf{Nhược điểm:}
+\begin{itemize}
+    \item Tốc độ inference chậm hơn PaddleOCR
+    \item Kích thước model lớn hơn
+    \item Khả năng xử lý văn bản nghiêng/cong hạn chế
+\end{itemize}
+
+\subsubsection{TrOCR (Microsoft)}
+TrOCR \cite{li2021trocr} là mô hình Transformer end-to-end cho OCR, kết hợp Vision Transformer (ViT) encoder và Text Transformer decoder.
+
+\textbf{Ưu điểm:}
+\begin{itemize}
+    \item Độ chính xác cao trên các benchmark
+    \item Kiến trúc Transformer hiện đại
+    \item Pre-trained model mạnh
+\end{itemize}
+
+\textbf{Nhược điểm:}
+\begin{itemize}
+    \item Yêu cầu tài nguyên GPU lớn
+    \item Tốc độ inference chậm cho real-time applications
+    \item Không tối ưu cho triển khai edge devices
+\end{itemize}
+
+\subsubsection{PaddleOCR (Baidu)}
+PaddleOCR \cite{du2020pp} là bộ công cụ OCR của PaddlePaddle với kiến trúc PP-OCR/PP-OCRv4, sử dụng SVTR backbone.
+
+\textbf{Ưu điểm:}
+\begin{itemize}
+    \item Cân bằng tốt giữa độ chính xác và tốc độ
+    \item Model nhẹ (SVTR\_LCNet chỉ ~12MB)
+    \item Tích hợp rectification (STN/TPS) cho văn bản nghiêng
+    \item Hỗ trợ nhiều backend (CPU, GPU, TensorRT)
+    \item Cộng đồng Trung Quốc lớn, nhiều tài liệu tiếng Việt
+\end{itemize}
+
+\textbf{Nhược điểm:}
+\begin{itemize}
+    \item Phụ thuộc PaddlePaddle framework
+    \item Một số lỗi với ký tự đặc biệt
+\end{itemize}
+
+\subsection{Bảng so sánh các phương pháp}
+
+\begin{table}[!ht]
+\centering
+\caption{So sánh các công cụ OCR cho bài toán ALPR}
+\label{tab:ocr_comparison}
+\begin{tabular}{|l|c|c|c|c|}
+\hline
+\textbf{Tiêu chí} & \textbf{Tesseract} & \textbf{EasyOCR} & \textbf{TrOCR} & \textbf{PaddleOCR} \\ \hline
+Độ chính xác & Trung bình & Khá & Cao & Cao \\ \hline
+Tốc độ inference & Chậm & Trung bình & Chậm & Nhanh \\ \hline
+Kích thước model & Nhỏ & Lớn & Rất lớn & Nhỏ \\ \hline
+Xử lý text nghiêng & Kém & Trung bình & Khá & Tốt (TPS) \\ \hline
+Real-time capable & Không & Hạn chế & Không & Có \\ \hline
+Dễ tích hợp & Trung bình & Tốt & Trung bình & Tốt \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{Lý do lựa chọn PaddleOCR}
+Sau khi phân tích các phương pháp, chúng tôi lựa chọn \textbf{PaddleOCR} cho dự án với các lý do sau:
+
+\begin{enumerate}
+    \item \textbf{Cân bằng accuracy-speed:} PaddleOCR cung cấp sự cân bằng tốt nhất giữa độ chính xác và tốc độ, quan trọng cho ứng dụng real-time.
+    
+    \item \textbf{Xử lý biển số nghiêng:} Tích hợp sẵn module rectification (STN/TPS) giúp xử lý biển số bị biến dạng do góc camera mà không cần tiền xử lý phức tạp.
+    
+    \item \textbf{Model nhẹ:} SVTR\_LCNet chỉ ~12MB, phù hợp triển khai trên phần cứng phổ thông và edge devices.
+    
+    \item \textbf{Tương thích tốt:} Hỗ trợ nhiều backend (CPU, GPU, TensorRT), dễ dàng tích hợp vào pipeline Python hiện có.
+    
+    \item \textbf{Cập nhật liên tục:} Baidu liên tục cải tiến PaddleOCR với các phiên bản PP-OCRv2, v3, v4.
+\end{enumerate}
 
 \section{PaddleOCR - Nhận dạng ký tự}
 
@@ -724,3 +916,171 @@ Trong phạm vi lý thuyết, so sánh dựa trên cấu trúc pipeline và chi 
 \end{itemize}
 
 \textbf{Ưu tiên triển khai:} Tùy ràng buộc hạ tầng và mục tiêu hệ thống, lựa chọn One-Stage hoặc Two-Stage cho phù hợp.
+\section{Các yếu tố quan trọng cần tinh chỉnh}
+
+Phần này tổng hợp các hyperparameters và yếu tố kỹ thuật quan trọng cần được điều chỉnh để tối ưu hệ thống ALPR, được sắp xếp theo mức độ ưu tiên.
+
+\subsection{Hyperparameters ưu tiên cao}
+
+\begin{table}[!ht]
+\centering
+\caption{Các hyperparameters quan trọng nhất cho hệ thống ALPR}
+\label{tab:alpr_hyperparams_high}
+\begin{tabular}{|l|p{5cm}|p{5cm}|}
+\hline
+\textbf{Tham số} & \textbf{Mô tả} & \textbf{Tác động} \\ \hline
+\multicolumn{3}{|c|}{\textbf{Plate Detection (YOLOv8)}} \\ \hline
+Confidence threshold & Ngưỡng tin cậy để chấp nhận detection & Quá cao: bỏ sót biển số mờ; Quá thấp: nhiều false positive \\ \hline
+IOU threshold & Ngưỡng IoU cho NMS & Ảnh hưởng việc loại bỏ box trùng \\ \hline
+Image size & Kích thước ảnh input (640, 1280) & Ảnh lớn: phát hiện vật nhỏ tốt hơn nhưng chậm hơn \\ \hline
+\multicolumn{3}{|c|}{\textbf{Tiền xử lý ảnh}} \\ \hline
+CLAHE clipLimit & Giới hạn histogram equalization & 2.0-4.0, cao hơn tăng contrast nhưng có thể khuếch đại nhiễu \\ \hline
+CLAHE tileGridSize & Kích thước tile (8,8) & Tile nhỏ: chi tiết hơn; Tile lớn: smooth hơn \\ \hline
+Sharpening strength & Cường độ làm sắc nét & Quá mạnh: tạo artifact; Quá nhẹ: không hiệu quả \\ \hline
+\multicolumn{3}{|c|}{\textbf{OCR (PaddleOCR)}} \\ \hline
+det\_db\_thresh & Ngưỡng cho text detection & Ảnh hưởng độ nhạy phát hiện vùng text \\ \hline
+rec\_conf\_threshold & Ngưỡng tin cậy recognition & Lọc kết quả OCR chất lượng thấp \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{Hyperparameters ưu tiên trung bình}
+
+\begin{table}[!ht]
+\centering
+\caption{Các hyperparameters phụ trợ cho hệ thống ALPR}
+\label{tab:alpr_hyperparams_mid}
+\begin{tabular}{|l|p{5cm}|p{5cm}|}
+\hline
+\textbf{Tham số} & \textbf{Mô tả} & \textbf{Tác động} \\ \hline
+\multicolumn{3}{|c|}{\textbf{Huấn luyện YOLOv8}} \\ \hline
+Epochs & Số epoch huấn luyện & 100-300 epochs cho convergence \\ \hline
+Batch size & Kích thước batch & Ảnh hưởng gradient stability \\ \hline
+Learning rate & Tốc độ học & 0.01 (SGD) hoặc 0.001 (Adam) \\ \hline
+Augmentation & Mosaic, mixup, hsv & Tăng diversity, giảm overfitting \\ \hline
+\multicolumn{3}{|c|}{\textbf{Post-processing}} \\ \hline
+Min/Max plate length & Độ dài biển số hợp lệ & 7-9 ký tự cho biển số VN \\ \hline
+Format validation regex & Pattern kiểm tra định dạng & Lọc kết quả sai format \\ \hline
+\end{tabular}
+\end{table}
+
+\subsection{Giải thích tác động của các hyperparameters}
+
+\subsubsection{Confidence Threshold (Detection)}
+Đây là hyperparameter quan trọng nhất, quyết định trade-off giữa Precision và Recall:
+\begin{itemize}
+    \item \textbf{Threshold cao (0.7-0.9):} Giảm false positive nhưng có thể bỏ sót biển số trong điều kiện khó (mờ, nghiêng, xa camera)
+    \item \textbf{Threshold thấp (0.3-0.5):} Tăng recall nhưng cần bộ lọc hậu xử lý mạnh hơn
+    \item \textbf{Khuyến nghị:} 0.5-0.6 cho cân bằng, kết hợp với validation format
+\end{itemize}
+
+\subsubsection{CLAHE Parameters}
+CLAHE ảnh hưởng trực tiếp đến chất lượng ảnh đầu vào cho OCR:
+\begin{itemize}
+    \item \textbf{clipLimit = 2.0:} An toàn, phù hợp đa số trường hợp
+    \item \textbf{clipLimit = 3.0-4.0:} Tốt cho ảnh tối, nhưng có thể khuếch đại nhiễu
+    \item \textbf{tileGridSize = (8,8):} Giá trị chuẩn, cân bằng giữa chi tiết và smooth
+\end{itemize}
+
+\subsubsection{Image Size (YOLOv8)}
+Kích thước input ảnh hưởng đến khả năng phát hiện biển số nhỏ:
+\begin{itemize}
+    \item \textbf{640px:} Nhanh, phù hợp xe gần camera
+    \item \textbf{1280px:} Phát hiện biển số xa tốt hơn, nhưng inference chậm hơn ~4x
+    \item \textbf{Trade-off:} Cân nhắc FPS requirement và khoảng cách camera-xe
+\end{itemize}
+
+\section{Phương pháp đánh giá hệ thống ALPR}
+
+Để đánh giá toàn diện hệ thống ALPR, cần sử dụng các metrics riêng cho từng module.
+
+\subsection{Metrics cho Plate Detection}
+
+\subsubsection{Precision, Recall, F1-Score}
+Các metrics cơ bản cho bài toán object detection:
+\begin{equation}
+    \text{Precision} = \frac{TP}{TP + FP}, \quad \text{Recall} = \frac{TP}{TP + FN}
+\end{equation}
+\begin{equation}
+    \text{F1} = 2 \times \frac{\text{Precision} \times \text{Recall}}{\text{Precision} + \text{Recall}}
+\end{equation}
+
+Trong đó:
+\begin{itemize}
+    \item $TP$ (True Positive): Biển số được phát hiện đúng (IoU $\geq$ 0.5 với ground truth)
+    \item $FP$ (False Positive): Detection không khớp với biển số thực
+    \item $FN$ (False Negative): Biển số thực không được phát hiện
+\end{itemize}
+
+\subsubsection{Mean Average Precision (mAP)}
+mAP là metric tiêu chuẩn cho object detection, tính diện tích dưới đường cong Precision-Recall:
+\begin{equation}
+    \text{AP} = \int_0^1 P(R) \, dR
+\end{equation}
+
+\textbf{mAP@0.5:} AP tại ngưỡng IoU = 0.5, phổ biến cho ALPR. \\
+\textbf{mAP@0.5:0.95:} Trung bình AP từ IoU 0.5 đến 0.95, đánh giá nghiêm ngặt hơn.
+
+\subsection{Metrics cho OCR Recognition}
+
+\subsubsection{Character Accuracy (CA)}
+Tỷ lệ ký tự nhận dạng đúng:
+\begin{equation}
+    \text{CA} = \frac{\text{Số ký tự đúng}}{\text{Tổng số ký tự}}
+\end{equation}
+
+\textbf{Ví dụ:} Ground truth = ``30G07784'', Predicted = ``30G0778A'' \\
+$\Rightarrow$ CA = 7/8 = 87.5\%
+
+\subsubsection{Plate Recognition Rate (PRR)}
+Tỷ lệ biển số được nhận dạng hoàn toàn chính xác:
+\begin{equation}
+    \text{PRR} = \frac{\text{Số biển số đúng hoàn toàn}}{\text{Tổng số biển số}}
+\end{equation}
+
+Đây là metric nghiêm ngặt nhất, yêu cầu 100\% ký tự đúng.
+
+\subsubsection{Edit Distance (Levenshtein Distance)}
+Số phép chỉnh sửa tối thiểu (thêm, xóa, thay) để biến chuỗi dự đoán thành chuỗi thực:
+\begin{equation}
+    \text{CER} = \frac{\text{EditDistance}(pred, truth)}{\text{len}(truth)}
+\end{equation}
+
+\textbf{Character Error Rate (CER)} càng thấp càng tốt (0\% là hoàn hảo).
+
+\subsection{Metrics tổng hợp End-to-End}
+
+\subsubsection{End-to-End Accuracy}
+Metric cuối cùng đánh giá toàn bộ pipeline:
+\begin{equation}
+    \text{E2E\_Acc} = \frac{\text{Biển số phát hiện đúng VÀ nhận dạng đúng}}{\text{Tổng số biển số trong dataset}}
+\end{equation}
+
+Metric này phản ánh chính xác khả năng của hệ thống trong thực tế.
+
+\subsubsection{Frames Per Second (FPS)}
+Đo lường khả năng xử lý real-time:
+\begin{equation}
+    \text{FPS} = \frac{\text{Số frame xử lý}}{\text{Thời gian (giây)}}
+\end{equation}
+
+\textbf{Yêu cầu:} FPS $\geq$ 15-30 cho ứng dụng real-time.
+
+\subsection{Bảng tổng hợp metrics dự kiến}
+
+\begin{table}[!ht]
+\centering
+\caption{Các metrics đánh giá và mục tiêu dự kiến}
+\label{tab:alpr_metrics_target}
+\begin{tabular}{|l|l|c|c|}
+\hline
+\textbf{Module} & \textbf{Metric} & \textbf{Mục tiêu} & \textbf{Ưu tiên} \\ \hline
+\multirow{3}{*}{Plate Detection} & mAP@0.5 & $\geq$ 90\% & Cao \\ \cline{2-4}
+ & Recall & $\geq$ 95\% & Cao \\ \cline{2-4}
+ & Precision & $\geq$ 85\% & Trung bình \\ \hline
+\multirow{3}{*}{OCR Recognition} & Character Accuracy & $\geq$ 95\% & Cao \\ \cline{2-4}
+ & Plate Recognition Rate & $\geq$ 85\% & Cao \\ \cline{2-4}
+ & CER & $\leq$ 5\% & Trung bình \\ \hline
+\multirow{2}{*}{End-to-End} & E2E Accuracy & $\geq$ 80\% & Cao \\ \cline{2-4}
+ & FPS & $\geq$ 20 & Cao \\ \hline
+\end{tabular}
+\end{table}
