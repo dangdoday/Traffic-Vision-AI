@@ -61,6 +61,8 @@ class VideoHandlerMixin:
             self.thread = VideoThread(self.video_path)
             self.thread.change_pixmap_signal.connect(self.update_image)
             self.thread.error_signal.connect(self.show_error)
+            if hasattr(self, 'update_playback_info'):
+                self.thread.playback_info_signal.connect(self.update_playback_info)
             
             # Pass globals reference to thread
             # Use lambda for _show_all_boxes to get real-time value
@@ -89,6 +91,9 @@ class VideoHandlerMixin:
                 print(f"✅ Model set to new VideoThread for video change")
             
             self.thread.start()
+
+            if hasattr(self, 'reset_playback_ui_for_new_video'):
+                self.reset_playback_ui_for_new_video()
             
             # Store cap for TL detection
             self.cap = cv2.VideoCapture(self.video_path)

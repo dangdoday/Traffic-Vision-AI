@@ -4,96 +4,443 @@ Video Thread - Xử lý video và detection trong background thread
 import cv2
 import numpy as np
 import time
+import importlib
 import re
+from threading import Lock
+from collections import defaultdict
 from PyQt5.QtCore import QThread, pyqtSignal
 
-from core import VehicleTracker, ViolationDetector, StopLineManager, TrafficLightManager
-
-# PaddleOCR for license plate text recognition
 try:
-    from paddleocr import PaddleOCR
-    PADDLE_OCR_AVAILABLE = True
-    print("✅ PaddleOCR imported successfully")
-except Exception as e:
-    print(f"⚠️ PaddleOCR not available: {e}")
-    print("   Install: pip install paddleocr paddlepaddle")
-    PADDLE_OCR_AVAILABLE = False
+    from .vehicle_tracker import VehicleTracker
+    from .violation_detector import ViolationDetector
+    from .stopline_manager import StopLineManager
+    from .traffic_light_manager import TrafficLightManager
+except ImportError:
+    from core import VehicleTracker, ViolationDetector, StopLineManager, TrafficLightManager
+
+# OCR backends are imported lazily to keep the module importable in tests.
+PADDLE_OCR_AVAILABLE = importlib.util.find_spec("paddleocr") is not None
+EASYOCR_AVAILABLE = importlib.util.find_spec("easyocr") is not None
+
+# Common province/city plate prefixes in Vietnam (civilian plates).
+VALID_PROVINCE_CODES = {
+    "11", "12", "14", "15", "16", "17", "18", "19",
+    "20", "21", "22", "23", "24", "25", "26", "27", "28", "29",
+    "30", "31", "32", "33", "34", "35", "36", "37", "38",
+    "40", "41", "43", "47", "48", "49",
+    "50", "51", "52", "53", "54", "55", "56", "57", "58", "59",
+    "60", "61", "62", "63", "64", "65", "66", "67", "68", "69",
+    "70", "71", "72", "73", "74", "75", "76", "77", "78", "79",
+    "80", "81", "82", "83", "84", "85", "86", "88", "89",
+    "90", "92", "93", "94", "95", "97", "98", "99"
+}
+
+# OCR confusions for numeric positions.
+TO_DIGIT_MAP = {
+    "O": "0", "Q": "0", "D": "0",
+    "I": "1", "L": "1", "T": "7",
+    "Z": "2",
+    "S": "5",
+    "G": "6",
+    "B": "8"
+}
+
+# Common same-shape swaps for numeric slots. Used with small penalty only.
+DIGIT_AMBIGUOUS_SWAP = {
+    "1": "7",
+    "7": "1",
+}
+
+# OCR confusions for series letter positions.
+TO_SERIES_MAP = {
+    "0": "O", "1": "I", "2": "Z", "3": "B", "4": "A", "5": "S", "6": "G", "7": "T", "8": "B"
+}
+
+# Series letters I/O/Q are forbidden in Vietnamese civilian plates.
+SERIES_SAFE_REMAP = {
+    "I": "T",
+    "O": "D",
+    "Q": "D",
+}
+
+# Series letters in VN plates exclude I, O, Q.
+FORBIDDEN_SERIES = {"I", "O", "Q"}
+SERIES_REGEX = r"[A-HJ-NPR-Z]{1,2}"
+SERIES_LETTER_DIGIT_REGEX = r"[A-HJ-NPR-Z]\d"
+
+
+def _sanitize_ocr_text(text):
+    if not text:
+        return ""
+    return re.sub(r'[^A-Z0-9]', '', text.upper())
+
+
+def _unique_min_cost_candidates(candidates):
+    best = {}
+    for token, cost in candidates:
+        if not token:
+            continue
+        prev = best.get(token)
+        if prev is None or cost < prev:
+            best[token] = cost
+    return sorted(best.items(), key=lambda item: (item[1], item[0]))
+
+
+def _digit_candidates(ch, allow_17_swap=False):
+    """Return possible digit interpretations with edit costs."""
+    raw = str(ch).upper()
+    candidates = []
+
+    if raw.isdigit():
+        candidates.append((raw, 0))
+
+    mapped = TO_DIGIT_MAP.get(raw)
+    if mapped:
+        candidates.append((mapped, 0 if mapped == raw else 1))
+
+    base = _unique_min_cost_candidates(candidates)
+    if not allow_17_swap or not base:
+        return base
+
+    expanded = list(base)
+    for digit, cost in base:
+        swapped = DIGIT_AMBIGUOUS_SWAP.get(digit)
+        if swapped:
+            expanded.append((swapped, cost + 1))
+
+    return _unique_min_cost_candidates(expanded)
+
+
+def _to_digit(ch):
+    candidates = _digit_candidates(ch, allow_17_swap=False)
+    if not candidates:
+        return None
+    return candidates[0][0]
+
+
+def _series_letter_candidates(ch):
+    """Return possible series-letter interpretations with edit costs."""
+    raw = str(ch).upper()
+    candidates = []
+
+    if raw.isalpha():
+        candidates.append((raw, 0))
+
+    mapped = TO_SERIES_MAP.get(raw)
+    if mapped:
+        candidates.append((mapped, 0 if mapped == raw else 1))
+
+    normalized = []
+    for letter, cost in candidates:
+        if letter in FORBIDDEN_SERIES:
+            safe = SERIES_SAFE_REMAP.get(letter)
+            if not safe:
+                continue
+            normalized.append((safe, cost + 1))
+        else:
+            normalized.append((letter, cost))
+
+    return _unique_min_cost_candidates(normalized)
+
+
+def _to_series_letter(ch):
+    candidates = _series_letter_candidates(ch)
+    if not candidates:
+        return None
+    return candidates[0][0]
+
+
+def _build_plate_candidates(cleaned_text):
+    """Build candidate canonical plates from noisy OCR text.
+
+    Canonical forms (without separators):
+      - XX + L + N5      (e.g. 30G07784)
+      - XX + L + N6      (e.g. 61D206617, equivalent to 61D2-066.17 display)
+      - XX + LL + N5
+    """
+    candidates = []
+    if len(cleaned_text) < 8:
+        return candidates
+
+    def _parse_tail_digits(tail_src, tail_len):
+        if len(tail_src) < tail_len:
+            return None
+
+        digits = []
+        total_cost = 0
+        # Enforce contiguous numeric slots after series to avoid letter leakage.
+        for ch in tail_src[:tail_len]:
+            digit_options = _digit_candidates(ch, allow_17_swap=False)
+            if not digit_options:
+                return None
+            digit, digit_cost = digit_options[0]
+            digits.append(digit)
+            total_cost += digit_cost
+
+        return ''.join(digits), total_cost
+
+    def add_candidates_from_segment(segment, start_penalty=0):
+        if len(segment) < 8:
+            return
+
+        p0_options = _digit_candidates(segment[0], allow_17_swap=True)
+        p1_options = _digit_candidates(segment[1], allow_17_swap=True)
+        if not p0_options or not p1_options:
+            return
+
+        province_options = {}
+        for p0, p0_cost in p0_options[:2]:
+            for p1, p1_cost in p1_options[:2]:
+                province = f"{p0}{p1}"
+                total_cost = p0_cost + p1_cost
+                prev = province_options.get(province)
+                if prev is None or total_cost < prev:
+                    province_options[province] = total_cost
+
+        for province, province_cost in sorted(province_options.items(), key=lambda item: item[1]):
+            province_valid = province in VALID_PROVINCE_CODES
+            province_penalty = 0 if province_valid else 3
+
+            for series_len in (1, 2):
+                if len(segment) < 2 + series_len + 5:
+                    continue
+
+                series_chars = segment[2:2 + series_len]
+                series_out = []
+                series_cost = 0
+                series_ok = True
+
+                for ch in series_chars:
+                    mapped_options = _series_letter_candidates(ch)
+                    if not mapped_options:
+                        series_ok = False
+                        break
+                    mapped, mapped_cost = mapped_options[0]
+                    series_out.append(mapped)
+                    series_cost += mapped_cost
+
+                if not series_ok:
+                    continue
+
+                tail_src = segment[2 + series_len:]
+                # XX + LL + N5 is allowed; XX + L + N5/N6 is the common family.
+                tail_lengths = (5,) if series_len == 2 else (6, 5)
+                pattern_penalty = 1 if series_len == 2 else 0
+
+                for tail_len in tail_lengths:
+                    parsed_tail = _parse_tail_digits(tail_src, tail_len)
+                    if not parsed_tail:
+                        continue
+
+                    tail_digits, tail_cost = parsed_tail
+                    expected_len = 2 + series_len + tail_len
+                    length_penalty = abs(len(segment) - expected_len)
+
+                    canonical = f"{province}{''.join(series_out)}{tail_digits}"
+                    score = (
+                        province_cost + province_penalty + series_cost + tail_cost
+                        + length_penalty + pattern_penalty + start_penalty
+                    )
+                    candidates.append((score, canonical, province_valid))
+
+    # Primary parse: assume useful characters start near the beginning.
+    add_candidates_from_segment(cleaned_text)
+
+    # For long/noisy strings (often merged 2-line OCR), also scan short windows.
+    if len(cleaned_text) > 10:
+        max_start = min(4, len(cleaned_text) - 8)
+        for start in range(1, max_start + 1):
+            add_candidates_from_segment(cleaned_text[start:start + 12], start_penalty=start)
+
+    return candidates
+
+
+def _recover_two_line_merged(cleaned_text):
+    """Heuristic recovery for merged 2-line OCR text.
+
+    Example target style: XXS(S)-NNN.NN(N), canonicalized as XXSSNNNNN(N).
+    """
+    if len(cleaned_text) < 11:
+        return ""
+
+    candidates = []
+    max_split = min(6, len(cleaned_text) - 5)
+    for split in range(3, max_split + 1):
+        head = cleaned_text[:split]
+        tail = cleaned_text[split:]
+        if len(head) < 3:
+            continue
+
+        p0_options = _digit_candidates(head[0], allow_17_swap=True)
+        p1_options = _digit_candidates(head[1], allow_17_swap=True)
+        if not p0_options or not p1_options:
+            continue
+
+        province_options = {}
+        for p0, p0_cost in p0_options[:2]:
+            for p1, p1_cost in p1_options[:2]:
+                province = f"{p0}{p1}"
+                total_cost = p0_cost + p1_cost
+                prev = province_options.get(province)
+                if prev is None or total_cost < prev:
+                    province_options[province] = total_cost
+
+        for province, province_cost in sorted(province_options.items(), key=lambda item: item[1]):
+            province_valid = province in VALID_PROVINCE_CODES
+            province_penalty = 0 if province_valid else 3
+
+            for series_len in (1, 2):
+                if len(head) < 2 + series_len:
+                    continue
+                series_src = head[2:2 + series_len]
+                series_out = []
+                series_cost = 0
+                ok = True
+                for ch in series_src:
+                    mapped_options = _series_letter_candidates(ch)
+                    if not mapped_options:
+                        ok = False
+                        break
+                    mapped, mapped_cost = mapped_options[0]
+                    series_out.append(mapped)
+                    series_cost += mapped_cost
+                if not ok:
+                    continue
+
+                digit_stream = []
+                for ch in tail:
+                    digit_options = _digit_candidates(ch, allow_17_swap=False)
+                    if not digit_options:
+                        continue
+                    digit, digit_cost = digit_options[0]
+                    digit_stream.append((digit, digit_cost))
+
+                for tail_len in (5, 6):
+                    if len(digit_stream) < tail_len:
+                        continue
+                    # Prefer first N digits, but also allow last N digits for merged/noisy tails.
+                    for pick_last in (False, True):
+                        pool = digit_stream[-tail_len:] if pick_last else digit_stream[:tail_len]
+                        tail_digits = ''.join(d for d, _ in pool)
+                        tail_cost = sum(cost for _, cost in pool)
+                        split_penalty = abs(split - (2 + series_len))
+                        series_penalty = 1 if series_len == 2 else 0
+                        score = province_cost + series_cost + tail_cost + split_penalty + province_penalty + series_penalty
+                        canonical = f"{province}{''.join(series_out)}{tail_digits}"
+                        candidates.append((score, canonical, province_valid))
+
+    if not candidates:
+        return ""
+
+    best = min(candidates, key=lambda item: (item[0], 0 if item[2] else 1))
+    return best[1]
+
+
+def correct_plate_characters(plate_text):
+    """Return the best corrected canonical VN plate from noisy OCR text.
+
+    Output is canonical without separators (e.g. 59A12345, 30G123456).
+    """
+    cleaned = _sanitize_ocr_text(plate_text)
+    if not cleaned:
+        return ""
+
+    # Long strings are often merged lines/noise. Try dedicated recovery first.
+    if len(cleaned) > 12:
+        # Reject very noisy long strings early to avoid false positives.
+        alpha_count = sum(ch.isalpha() for ch in cleaned)
+        digit_like_count = sum(1 for ch in cleaned if ch.isdigit() or ch in TO_DIGIT_MAP)
+        has_early_province = any(
+            _to_digit(cleaned[i]) and _to_digit(cleaned[i + 1])
+            for i in range(0, min(3, len(cleaned) - 1))
+        )
+        if alpha_count > 4 or digit_like_count < 8 or not has_early_province:
+            return ""
+
+        recovered = _recover_two_line_merged(cleaned)
+        if recovered:
+            return recovered
+        # If 2-line heuristic fails, still try generic candidate extraction.
+        candidates = _build_plate_candidates(cleaned)
+        if candidates:
+            best = min(candidates, key=lambda item: (item[0], 0 if item[2] else 1))
+            return best[1]
+        return ""
+
+    candidates = _build_plate_candidates(cleaned)
+    if candidates:
+        # Lower score is better; when tied, prefer valid province code.
+        best = min(candidates, key=lambda item: (item[0], 0 if item[2] else 1))
+        return best[1]
+
+    # Avoid trusting long garbage directly.
+    if len(cleaned) > 10:
+        return ""
+
+    # Fallback best-effort for short strings.
+    return cleaned
 
 
 def validate_license_plate(plate_text, vehicle_class):
-    """
-    Validate Vietnamese license plate format.
-    
-    Xe máy (cls_id 2, 3):
-        - Format: xxyzxxxxx (8-9 ký tự)
-        - xx = 2 số đầu
-        - y = 1 chữ cái
-        - z = số hoặc chữ
-        - 4-5 số cuối
-        - Ví dụ: 29B12345, 30M04019, 29B1-23456
-    
-    Ô tô (cls_id 0, 1, 4):
-        - Format: xxyxxxxx (7-8 ký tự)
-        - xx = 2 số đầu
-        - y = 1 chữ cái
-        - 4-5 số tiếp theo
-        - Ví dụ: 51A1234, 30H12345
-    
-    Args:
-        plate_text: OCR text from plate
-        vehicle_class: Vehicle class ID (0=car, 1=bus, 2=bicycle, 3=motorbike, 4=truck)
-    
-    Returns:
-        (is_valid, cleaned_plate): Tuple of validation result and cleaned plate text
+    """Validate canonical VN plate text after correction.
+
+    Accepts data with/without separators, normalizes internally, then validates:
+      - province: 2 digits and in known province list
+            - series/tail in allowed canonical families:
+                1) XX + L  + N5
+                2) XX + L  + N6 (two-line display style: Ld + N5)
+                3) XX + LL + N5
     """
     if not plate_text:
         return (False, "")
-    
-    # Clean the text: remove spaces, dashes, dots, convert to uppercase
-    cleaned = re.sub(r'[\s\-\.\,]', '', plate_text.upper())
-    
-    # Check if it's motorbike (xe máy, xe đạp) or car (ô tô, xe bus, xe tải)
-    is_motorbike = vehicle_class in [2, 3]  # xe đạp, xe máy
-    is_car = vehicle_class in [0, 1, 4]  # ô tô, xe bus, xe tải
-    
-    if is_motorbike:
-        # Xe máy: 8-9 ký tự
-        # Pattern: 2 số + 1 chữ + 1 số/chữ + 4-5 số
-        # Ví dụ: 29B12345, 30M04019, 29B1A2345
-        if len(cleaned) < 8 or len(cleaned) > 9:
-            return (False, cleaned)
-        
-        # Check pattern: ^[0-9]{2}[A-Z][A-Z0-9][0-9]{4,5}$
-        pattern = r'^[0-9]{2}[A-Z][A-Z0-9][0-9]{4,5}$'
-        if re.match(pattern, cleaned):
-            return (True, cleaned)
-        else:
-            return (False, cleaned)
-    
-    elif is_car:
-        # Ô tô: 7-8 ký tự
-        # Pattern: 2 số + 1 chữ + 4-5 số
-        # Ví dụ: 51A1234, 30H12345
-        if len(cleaned) < 7 or len(cleaned) > 8:
-            return (False, cleaned)
-        
-        # Check pattern: ^[0-9]{2}[A-Z][0-9]{4,5}$
-        pattern = r'^[0-9]{2}[A-Z][0-9]{4,5}$'
-        if re.match(pattern, cleaned):
-            return (True, cleaned)
-        else:
-            return (False, cleaned)
-    
-    # Unknown vehicle type - use generic validation
-    # Accept 7-9 characters starting with 2 digits and a letter
-    if len(cleaned) < 7 or len(cleaned) > 9:
-        return (False, cleaned)
-    
-    pattern = r'^[0-9]{2}[A-Z][A-Z0-9]?[0-9]{4,5}$'
-    if re.match(pattern, cleaned):
-        return (True, cleaned)
-    
-    return (False, cleaned)
+
+    canonical = _sanitize_ocr_text(plate_text)
+    m_one_letter_5 = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d{5})$', canonical)
+    m_one_letter_6 = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d{6})$', canonical)
+    m_two_letters_5 = re.match(r'^(\d{2})([A-HJ-NPR-Z]{2})(\d{5})$', canonical)
+    m = m_one_letter_5 or m_one_letter_6 or m_two_letters_5
+    if m is None:
+        return (False, canonical)
+
+    province = m.group(1)
+    if province not in VALID_PROVINCE_CODES:
+        return (False, canonical)
+
+    return (True, canonical)
+
+
+def format_vietnamese_plate(plate_text):
+    """Format cleaned plate text into a common Vietnamese display style.
+
+    Input should already be uppercase and cleaned (A-Z0-9 only).
+    Examples:
+      29B12345  -> 29B-123.45
+            61D206617 -> 61D2-066.17
+      29H123456 -> 29H1-234.56
+    """
+    if not plate_text:
+        return ""
+
+    cleaned = _sanitize_ocr_text(plate_text)
+    # 1-letter + 6-digit canonical is shown as letter-digit / 5 digits.
+    # Example: 61D206617 -> 61D2-066.17
+    m_one_letter_6 = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d{6})$', cleaned)
+    if m_one_letter_6:
+        province = m_one_letter_6.group(1)
+        letter = m_one_letter_6.group(2)
+        tail6 = m_one_letter_6.group(3)
+        series = f"{letter}{tail6[0]}"
+        bottom = tail6[1:]
+        return f"{province}{series}-{bottom[:3]}.{bottom[3:]}"
+
+    m_standard = re.match(r'^(\d{2})([A-HJ-NPR-Z]{1,2})(\d{5})$', cleaned)
+    if m_standard is None:
+        return cleaned
+
+    province = m_standard.group(1)
+    series = m_standard.group(2)
+    tail = m_standard.group(3)
+    return f"{province}{series}-{tail[:3]}.{tail[3:]}"
 
 
 class VideoThread(QThread):
@@ -101,6 +448,7 @@ class VideoThread(QThread):
     
     change_pixmap_signal = pyqtSignal(np.ndarray)
     error_signal = pyqtSignal(str)
+    playback_info_signal = pyqtSignal(dict)
     
     def __init__(self, video_path):
         super().__init__()
@@ -111,9 +459,25 @@ class VideoThread(QThread):
         self.model_loaded = False
         self.fps = 0
         self.frame_count = 0
+        self.display_count = 0
         self.fps_start_time = None
         self.realtime_mode = True  # Toggle realtime sync
         self.target_display_fps = 30  # Limit display FPS to reduce CPU usage
+        self.stable_display_mode = True
+        self.stable_display_fps = 20
+        self.repeat_last_frame_for_smoothness = True
+        self.enable_runtime_fps_logs = True
+        self.runtime_fps_log_interval_sec = 1.0
+
+        # Playback control state (pause/seek/timeline).
+        self.playback_paused = False
+        self.video_fps = 30.0
+        self.video_total_frames = 0
+        self.video_duration_sec = 0.0
+        self.current_playback_sec = 0.0
+        self._pending_seek_target_sec = None
+        self._last_playback_emit_time = 0.0
+        self._playback_lock = Lock()
         
         # Model config (will be set by MainWindow)
         self.model_config = None
@@ -140,6 +504,72 @@ class VideoThread(QThread):
         # YOLO Direct mode: Store OCR text for each vehicle
         # Format: {vehicle_track_id: 'plate_text'}
         self.vehicle_ocr_texts = {}
+
+        # Stable plate text actually shown/used per vehicle.
+        self.vehicle_stable_plates = {}
+
+        # Candidate smoothing state per vehicle.
+        # Format: {veh_id: {'candidate': str, 'streak': int, 'last_frame': int}}
+        self.vehicle_plate_smoothing = {}
+
+        # Temporal smoothing thresholds.
+        self.plate_initial_confirm_frames = 3
+        self.plate_switch_confirm_frames = 4
+
+        # OCR voting across frames to stabilize low-quality readings.
+        # Format: {vehicle_track_id: {plate_text: {'count': int, 'last_frame': int}}}
+        self.vehicle_ocr_votes = {}
+        self.vehicle_ocr_history = {}
+        self.max_ocr_history_per_vehicle = 10
+
+        # OCR throttling state (per vehicle) to reduce lag from repeated OCR retries.
+        self.vehicle_ocr_attempts = {}
+        self.vehicle_last_ocr_frame = {}
+        self.ocr_retry_interval_frames = 12
+        self.ocr_process_every_n_frames = 3
+        self.ocr_bootstrap_every_n_frames = 3
+        self.ocr_bootstrap_retry_interval_frames = 3
+        self.max_ocr_attempts_per_vehicle = 45
+        self.max_ocr_jobs_per_frame = 2
+        self.max_ocr_jobs_per_frame_low_traffic = 3
+        self.max_ocr_jobs_per_frame_high_traffic = 1
+        self.ocr_medium_traffic_vehicle_threshold = 3
+        self.ocr_high_traffic_vehicle_threshold = 6
+        self._ocr_frame_budget = self.max_ocr_jobs_per_frame
+        self._ocr_jobs_this_frame = 0
+        self.ocr_heavy_until_attempt = 2
+        self.ocr_heavy_pass_period = 6
+        self.max_paddle_candidates_quick = 3
+        self.max_paddle_candidates_heavy = 8
+        self.min_ocr_plate_width = 40
+        self.min_ocr_plate_height = 14
+        self.ocr_priority_heavy_threshold = 0.70
+        self.ocr_signature_size = (24, 12)
+        self.ocr_signature_diff_threshold = 8.5
+        self.ocr_positive_cache_ttl_frames = 45
+        self.ocr_negative_cache_ttl_frames = 8
+        self.enable_ocr_debug_logs = False
+        self.enable_perf_logs = False
+
+        # Per-vehicle OCR reuse cache to avoid repeating expensive OCR on near-identical crops.
+        # Format: {veh_id: {'sig': np.ndarray, 'text': str, 'frame': int, 'heavy_frame': int}}
+        self.vehicle_ocr_signature_cache = {}
+
+        # GPU-first execution knobs for realtime inference.
+        self.cuda_available = False
+        self.yolo_device = 'cpu'
+        self.yolo_half = False
+        try:
+            import torch
+            self.cuda_available = torch.cuda.is_available()
+            if self.cuda_available:
+                torch.backends.cudnn.benchmark = True
+                self.yolo_device = 0
+                self.yolo_half = True
+        except Exception:
+            self.cuda_available = False
+            self.yolo_device = 'cpu'
+            self.yolo_half = False
         
         # YOLO Direct mode: Map vehicle track_id to plate track_id
         # Format: {vehicle_track_id: plate_track_id}
@@ -153,8 +583,12 @@ class VideoThread(QThread):
         # Initialize PaddleOCR
         self.ocr = None
         self.enable_ocr = True  # Toggle OCR on/off
+        self.easyocr_reader = None
+        if self.enable_ocr_debug_logs:
+            print(f"🧪 OCR debug mode: ON | Paddle module: {PADDLE_OCR_AVAILABLE} | EasyOCR module: {EASYOCR_AVAILABLE}")
         if PADDLE_OCR_AVAILABLE and self.enable_ocr:
             try:
+                PaddleOCR = importlib.import_module("paddleocr").PaddleOCR
                 # Suppress minor warnings during PaddleOCR initialization
                 import sys
                 import io
@@ -163,7 +597,11 @@ class VideoThread(QThread):
                 
                 # use_textline_orientation=True: detect rotated text
                 # lang='en': English (use 'ch' for Chinese, 'latin' for Latin scripts)
-                self.ocr = PaddleOCR(use_textline_orientation=True, lang='en')
+                try:
+                    self.ocr = PaddleOCR(use_textline_orientation=True, lang='en', use_gpu=self.cuda_available)
+                except Exception:
+                    # Fallback to CPU when paddle GPU runtime is unavailable/misconfigured.
+                    self.ocr = PaddleOCR(use_textline_orientation=True, lang='en', use_gpu=False)
                 
                 # Restore stderr
                 sys.stderr = old_stderr
@@ -172,6 +610,9 @@ class VideoThread(QThread):
                 sys.stderr = old_stderr  # Restore stderr on error too
                 print(f"⚠️ Failed to initialize PaddleOCR: {e}")
                 self.ocr = None
+
+            # Do not initialize EasyOCR eagerly to avoid startup delay.
+            # It will be created only if PaddleOCR cannot read text.
         
         # Reference to global state (will be set externally)
         self.globals_ref = None
@@ -203,9 +644,538 @@ class VideoThread(QThread):
         img = cv2.filter2D(img, -1, kernel)
         
         return img
+
+    def _extract_texts_from_paddle_result(self, result, min_conf=0.35):
+        """Extract (text, confidence) pairs from PaddleOCR outputs across versions."""
+        extracted = []
+
+        if not result:
+            return extracted
+
+        # Format A (classic): [[ [bbox, (text, conf)], ... ]]
+        if isinstance(result, list) and result and isinstance(result[0], list):
+            for line in result[0]:
+                # Format A1 (rec-only): (text, conf) or [text, conf]
+                if isinstance(line, (list, tuple)) and len(line) == 2 and isinstance(line[0], str):
+                    text = str(line[0]).strip()
+                    try:
+                        conf = float(line[1])
+                    except Exception:
+                        conf = 0.0
+                    if text and conf >= min_conf:
+                        extracted.append((text, conf))
+                    continue
+
+                if isinstance(line, (list, tuple)) and len(line) >= 2:
+                    text_info = line[1]
+
+                    # Format A2 (rec-only nested): line[1] is confidence scalar, line[0] is text
+                    if isinstance(line[0], str) and isinstance(text_info, (int, float)):
+                        text = str(line[0]).strip()
+                        try:
+                            conf = float(text_info)
+                        except Exception:
+                            conf = 0.0
+                        if text and conf >= min_conf:
+                            extracted.append((text, conf))
+                        continue
+
+                    if isinstance(text_info, (list, tuple)) and len(text_info) >= 2:
+                        text = str(text_info[0]).strip()
+                        try:
+                            conf = float(text_info[1])
+                        except Exception:
+                            conf = 0.0
+                        if text and conf >= min_conf:
+                            extracted.append((text, conf))
+
+        # Format B (dict-like from newer wrappers): {'rec_texts': [...], 'rec_scores': [...]}
+        elif isinstance(result, dict):
+            rec_texts = result.get('rec_texts', [])
+            rec_scores = result.get('rec_scores', [])
+            for i, text in enumerate(rec_texts):
+                try:
+                    conf = float(rec_scores[i]) if i < len(rec_scores) else 0.0
+                except Exception:
+                    conf = 0.0
+                text = str(text).strip()
+                if text and conf >= min_conf:
+                    extracted.append((text, conf))
+
+        # Format C (list of dicts)
+        elif isinstance(result, list):
+            for item in result:
+                # Format C1: direct tuple/list pair (text, conf)
+                if isinstance(item, (list, tuple)) and len(item) == 2 and isinstance(item[0], str):
+                    text = str(item[0]).strip()
+                    try:
+                        conf = float(item[1])
+                    except Exception:
+                        conf = 0.0
+                    if text and conf >= min_conf:
+                        extracted.append((text, conf))
+                    continue
+
+                if isinstance(item, dict):
+                    rec_texts = item.get('rec_texts', [])
+                    rec_scores = item.get('rec_scores', [])
+                    for i, text in enumerate(rec_texts):
+                        try:
+                            conf = float(rec_scores[i]) if i < len(rec_scores) else 0.0
+                        except Exception:
+                            conf = 0.0
+                        text = str(text).strip()
+                        if text and conf >= min_conf:
+                            extracted.append((text, conf))
+
+        return extracted
+
+    def _normalize_plate_text(self, text):
+        """Normalize OCR text for Vietnamese plate matching."""
+        if not text:
+            return ""
+        return re.sub(r'[^A-Z0-9]', '', text.upper())
+
+    def _compute_plate_priority(self, plate_w, plate_h, plate_conf=0.5):
+        """Compute OCR priority score from plate geometry and detector confidence."""
+        area = max(1.0, float(plate_w) * float(plate_h))
+        area_score = min(1.0, area / 7200.0)  # ~120x60 is considered ideal quality.
+
+        aspect = float(plate_w) / max(1.0, float(plate_h))
+        aspect_score = 1.0 - min(1.0, abs(aspect - 3.0) / 3.0)
+
+        conf_norm = max(0.0, min(1.0, (float(plate_conf) - 0.2) / 0.65))
+        return 0.5 * area_score + 0.3 * aspect_score + 0.2 * conf_norm
+
+    def _should_use_heavy_ocr(self, attempt_no, plate_priority):
+        """Decide whether a heavy OCR pass is worth running on this attempt."""
+        base_heavy = attempt_no <= self.ocr_heavy_until_attempt or (attempt_no % self.ocr_heavy_pass_period == 0)
+        if not base_heavy:
+            return False
+
+        # In crowded scenes, keep heavy OCR only for better-quality crops.
+        if self._ocr_frame_budget <= self.max_ocr_jobs_per_frame_high_traffic and plate_priority < self.ocr_priority_heavy_threshold:
+            return False
+
+        # Very low-quality crops are expensive with little gain: do sparse heavy retries.
+        if plate_priority < 0.35 and (attempt_no % (self.ocr_heavy_pass_period * 2) != 0):
+            return False
+
+        return True
+
+    def _compute_plate_signature(self, plate_img):
+        """Create a tiny grayscale signature for cheap OCR-cache similarity checks."""
+        try:
+            if plate_img is None or getattr(plate_img, 'size', 0) == 0:
+                return None
+            gray = plate_img if len(plate_img.shape) == 2 else cv2.cvtColor(plate_img, cv2.COLOR_BGR2GRAY)
+            sig = cv2.resize(gray, self.ocr_signature_size, interpolation=cv2.INTER_AREA)
+            return sig.astype(np.int16)
+        except Exception:
+            return None
+
+    def _try_reuse_recent_ocr(self, veh_track_id, plate_img, heavy_mode=False):
+        """Reuse OCR result when the current crop is near-identical to recent frames."""
+        if veh_track_id is None:
+            return None, False
+
+        cache_entry = self.vehicle_ocr_signature_cache.get(veh_track_id)
+        if not cache_entry:
+            return None, False
+
+        sig_now = self._compute_plate_signature(plate_img)
+        sig_prev = cache_entry.get('sig')
+        if sig_now is None or sig_prev is None:
+            return None, False
+
+        frame_gap = self.current_frame_count - int(cache_entry.get('frame', -10**9))
+        diff = float(np.mean(np.abs(sig_now - sig_prev)))
+        if diff > self.ocr_signature_diff_threshold:
+            return None, False
+
+        cached_text = cache_entry.get('text', '')
+        if cached_text and frame_gap <= self.ocr_positive_cache_ttl_frames:
+            return cached_text, True
+
+        if (not cached_text) and (not heavy_mode) and frame_gap <= self.ocr_negative_cache_ttl_frames:
+            return "", True
+
+        return None, False
+
+    def _finalize_ocr_result(self, veh_track_id, plate_img, text, heavy_mode=False):
+        """Store OCR cache metadata and return text unchanged."""
+        if veh_track_id is None:
+            return text
+
+        sig_now = self._compute_plate_signature(plate_img)
+        if sig_now is None:
+            return text
+
+        cache_entry = {
+            'sig': sig_now,
+            'text': text or '',
+            'frame': self.current_frame_count,
+            'heavy_frame': self.current_frame_count if heavy_mode else self.current_frame_count,
+        }
+        self.vehicle_ocr_signature_cache[veh_track_id] = cache_entry
+        return text
+
+    def _deskew_plate_image(self, plate_img):
+        """Try a light deskew to recover slanted plate text."""
+        try:
+            bgr = plate_img if len(plate_img.shape) == 3 else cv2.cvtColor(plate_img, cv2.COLOR_GRAY2BGR)
+            gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+            binary = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+            coords = cv2.findNonZero(255 - binary)
+            if coords is None or len(coords) < 10:
+                return bgr
+
+            rect = cv2.minAreaRect(coords)
+            angle = rect[-1]
+            if angle < -45:
+                angle = 90 + angle
+
+            if abs(angle) < 1.5:
+                return bgr
+
+            h, w = bgr.shape[:2]
+            center = (w // 2, h // 2)
+            matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+            rotated = cv2.warpAffine(bgr, matrix, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+            return rotated
+        except Exception:
+            return plate_img
+
+    def _order_quad_points(self, pts):
+        """Order four points as top-left, top-right, bottom-right, bottom-left."""
+        pts = np.array(pts, dtype=np.float32)
+        s = pts.sum(axis=1)
+        diff = np.diff(pts, axis=1)
+
+        ordered = np.zeros((4, 2), dtype=np.float32)
+        ordered[0] = pts[np.argmin(s)]
+        ordered[2] = pts[np.argmax(s)]
+        ordered[1] = pts[np.argmin(diff)]
+        ordered[3] = pts[np.argmax(diff)]
+        return ordered
+
+    def _rectify_plate_perspective(self, plate_img):
+        """Rectify perspective for oblique plates using contour quad detection."""
+        try:
+            bgr = plate_img if len(plate_img.shape) == 3 else cv2.cvtColor(plate_img, cv2.COLOR_GRAY2BGR)
+            h, w = bgr.shape[:2]
+            if h < 14 or w < 40:
+                return bgr
+
+            gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+            blur = cv2.GaussianBlur(gray, (5, 5), 0)
+            edges = cv2.Canny(blur, 60, 180)
+            kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (3, 3))
+            edges = cv2.dilate(edges, kernel, iterations=1)
+
+            contours, _ = cv2.findContours(edges, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+            if not contours:
+                return bgr
+
+            img_area = float(h * w)
+            for cnt in sorted(contours, key=cv2.contourArea, reverse=True)[:8]:
+                area = cv2.contourArea(cnt)
+                if area < img_area * 0.18:
+                    continue
+
+                peri = cv2.arcLength(cnt, True)
+                if peri <= 0:
+                    continue
+
+                approx = cv2.approxPolyDP(cnt, 0.03 * peri, True)
+                if len(approx) != 4:
+                    continue
+
+                quad = self._order_quad_points(approx.reshape(4, 2))
+                tl, tr, br, bl = quad
+
+                width_top = np.linalg.norm(tr - tl)
+                width_bottom = np.linalg.norm(br - bl)
+                max_width = int(max(width_top, width_bottom))
+
+                height_left = np.linalg.norm(bl - tl)
+                height_right = np.linalg.norm(br - tr)
+                max_height = int(max(height_left, height_right))
+
+                if max_width < 40 or max_height < 12:
+                    continue
+
+                aspect = max_width / max(1, max_height)
+                if aspect < 1.4 or aspect > 7.5:
+                    continue
+
+                dst = np.array([
+                    [0, 0],
+                    [max_width - 1, 0],
+                    [max_width - 1, max_height - 1],
+                    [0, max_height - 1],
+                ], dtype=np.float32)
+
+                matrix = cv2.getPerspectiveTransform(quad, dst)
+                warped = cv2.warpPerspective(
+                    bgr,
+                    matrix,
+                    (max_width, max_height),
+                    flags=cv2.INTER_CUBIC,
+                    borderMode=cv2.BORDER_REPLICATE,
+                )
+
+                if warped is not None and getattr(warped, 'size', 0) > 0:
+                    return warped
+
+            # Fallback: use minAreaRect when contour approximation misses 4-point quad.
+            coords = cv2.findNonZero(edges)
+            if coords is not None and len(coords) >= 12:
+                rect = cv2.minAreaRect(coords)
+                box = cv2.boxPoints(rect)
+                quad = self._order_quad_points(box)
+
+                tl, tr, br, bl = quad
+                width_top = np.linalg.norm(tr - tl)
+                width_bottom = np.linalg.norm(br - bl)
+                max_width = int(max(width_top, width_bottom))
+
+                height_left = np.linalg.norm(bl - tl)
+                height_right = np.linalg.norm(br - tr)
+                max_height = int(max(height_left, height_right))
+
+                if max_width >= 40 and max_height >= 12:
+                    dst = np.array([
+                        [0, 0],
+                        [max_width - 1, 0],
+                        [max_width - 1, max_height - 1],
+                        [0, max_height - 1],
+                    ], dtype=np.float32)
+                    matrix = cv2.getPerspectiveTransform(quad, dst)
+                    warped = cv2.warpPerspective(
+                        bgr,
+                        matrix,
+                        (max_width, max_height),
+                        flags=cv2.INTER_CUBIC,
+                        borderMode=cv2.BORDER_REPLICATE,
+                    )
+                    if warped is not None and getattr(warped, 'size', 0) > 0:
+                        return warped
+
+            return bgr
+        except Exception:
+            return plate_img
+
+    def _enhance_plate_for_readability(self, plate_img, fast_mode=False):
+        """Enhance plate readability with upscale + contrast + sharpening."""
+        try:
+            bgr = plate_img if len(plate_img.shape) == 3 else cv2.cvtColor(plate_img, cv2.COLOR_GRAY2BGR)
+            h, w = bgr.shape[:2]
+            if h < 8 or w < 20:
+                return bgr
+
+            # Upscale small crops so OCR can separate close characters.
+            target_h = 72
+            if h < target_h:
+                scale = min(4.0, target_h / max(1, float(h)))
+                bgr = cv2.resize(bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+
+            gray = cv2.cvtColor(bgr, cv2.COLOR_BGR2GRAY)
+            if fast_mode:
+                den = cv2.GaussianBlur(gray, (3, 3), 0)
+                clahe = cv2.createCLAHE(clipLimit=2.6, tileGridSize=(8, 8)).apply(den)
+            else:
+                den = cv2.bilateralFilter(gray, d=7, sigmaColor=40, sigmaSpace=40)
+                # Increase local contrast for low-light and side-angle plates.
+                clahe = cv2.createCLAHE(clipLimit=3.2, tileGridSize=(8, 8)).apply(den)
+            norm = cv2.normalize(clahe, None, 0, 255, cv2.NORM_MINMAX)
+
+            blur = cv2.GaussianBlur(norm, (0, 0), 1.0)
+            sharp = cv2.addWeighted(norm, 1.65, blur, -0.65, 0)
+
+            return cv2.cvtColor(sharp, cv2.COLOR_GRAY2BGR)
+        except Exception:
+            return plate_img
+
+    def _add_safe_plate_border(self, plate_img, border_ratio=0.08):
+        """Add replicated border so edge characters are not clipped during OCR."""
+        try:
+            bgr = plate_img if len(plate_img.shape) == 3 else cv2.cvtColor(plate_img, cv2.COLOR_GRAY2BGR)
+            h, w = bgr.shape[:2]
+            if h < 2 or w < 2:
+                return bgr
+
+            by = max(2, int(h * border_ratio))
+            bx = max(2, int(w * border_ratio))
+            return cv2.copyMakeBorder(bgr, by, by, bx, bx, borderType=cv2.BORDER_REPLICATE)
+        except Exception:
+            return plate_img
+
+    def _crop_plate_roi(self, frame_original, plate_bbox, pad_x_ratio, pad_y_ratio):
+        """Crop plate ROI with configurable padding ratios."""
+        try:
+            x1, y1, x2, y2 = plate_bbox
+            plate_w = max(1, x2 - x1)
+            plate_h = max(1, y2 - y1)
+
+            pad_x = int(plate_w * pad_x_ratio)
+            pad_y = int(plate_h * pad_y_ratio)
+
+            cx1 = x1 - pad_x
+            cy1 = y1 - pad_y
+            cx2 = x2 + pad_x
+            cy2 = y2 + pad_y
+
+            h, w = frame_original.shape[:2]
+            cx1 = max(0, min(cx1, w - 1))
+            cy1 = max(0, min(cy1, h - 1))
+            cx2 = max(cx1 + 1, min(cx2, w))
+            cy2 = max(cy1 + 1, min(cy2, h))
+
+            roi = frame_original[cy1:cy2, cx1:cx2]
+            if roi is None or getattr(roi, 'size', 0) == 0:
+                return None
+            return roi
+        except Exception:
+            return None
+
+    def _build_plate_rois(self, frame_original, plate_bbox, heavy_mode=False):
+        """Create multiple padded crops to avoid tight-box OCR failures."""
+        roi_specs = [('base', 0.20, 0.32)]
+        if heavy_mode:
+            roi_specs.extend([
+                ('wide', 0.32, 0.44),
+                ('xwide', 0.45, 0.55),
+                ('tall', 0.28, 0.65),
+            ])
+
+        rois = []
+        for name, px, py in roi_specs:
+            roi = self._crop_plate_roi(frame_original, plate_bbox, px, py)
+            if roi is not None and getattr(roi, 'size', 0) > 0:
+                rois.append((name, roi))
+
+        # Fallback to original bbox crop if padded extraction failed.
+        if not rois:
+            fallback = self._crop_plate_roi(frame_original, plate_bbox, 0.0, 0.0)
+            if fallback is not None and getattr(fallback, 'size', 0) > 0:
+                rois.append(('fallback', fallback))
+
+        return rois
+
+    def _split_plate_lines(self, plate_img):
+        """Split likely 2-line plate into top and bottom crops."""
+        h, w = plate_img.shape[:2]
+        if h < 24:
+            return []
+
+        # 2-line plates are usually taller relative to width.
+        if (w / max(1, h)) > 2.2:
+            return []
+
+        split_y = int(h * 0.5)
+        pad = max(1, int(h * 0.06))
+        top = plate_img[0:max(1, split_y + pad), :]
+        bottom = plate_img[max(0, split_y - pad):h, :]
+
+        lines = []
+        if getattr(top, 'size', 0) > 0:
+            lines.append(('line_top', top))
+        if getattr(bottom, 'size', 0) > 0:
+            lines.append(('line_bottom', bottom))
+        return lines
+
+    def _recognize_from_candidates(self, candidates, heavy_mode=False):
+        """Try OCR backends over candidate images and return first good text."""
+        for variant_name, candidate in candidates:
+            easy_text = self._recognize_with_easyocr(candidate)
+            if easy_text:
+                if self.enable_ocr_debug_logs:
+                    print(f"✅ EasyOCR raw ({variant_name}): '{easy_text}'")
+                return easy_text
+
+        if self.ocr is not None:
+            paddle_limit = self.max_paddle_candidates_heavy if heavy_mode else self.max_paddle_candidates_quick
+            for variant_name, candidate in candidates[:paddle_limit]:
+                try:
+                    result = self.ocr.ocr(candidate)
+                except Exception:
+                    continue
+
+                if result:
+                    extracted = self._extract_texts_from_paddle_result(result, min_conf=0.35)
+                    if extracted:
+                        texts = [t for t, _ in extracted]
+                        final_text = self._normalize_plate_text("".join(texts))
+                        if final_text:
+                            if self.enable_ocr_debug_logs:
+                                print(f"✅ PaddleOCR raw ({variant_name}): '{final_text}'")
+                            return final_text
+
+        return ""
+
+    def _select_ocr_candidates(self, candidates, heavy_mode=False):
+        """Select a lightweight or full OCR variant set for this attempt."""
+        if heavy_mode:
+            return candidates[:28]
+
+        quick_names = {'original', 'gray', 'clahe', 'otsu', 'adaptive'}
+        selected = []
+        for item in candidates:
+            name = item[0]
+            base_name = name.split('|', 1)[-1] if '|' in name else name
+            if base_name in quick_names:
+                selected.append(item)
+
+        if selected:
+            return selected[:8]
+        return candidates[:4]
+
+    def _recognize_with_easyocr(self, bgr_image):
+        """Primary OCR method using EasyOCR for plate recognition."""
+        if not EASYOCR_AVAILABLE:
+            return ""
+
+        try:
+            easyocr = importlib.import_module("easyocr")
+            if self.easyocr_reader is None:
+                import torch
+                self.easyocr_reader = easyocr.Reader(['en'], gpu=torch.cuda.is_available(), verbose=False)
+
+            result = self.easyocr_reader.readtext(
+                bgr_image,
+                detail=1,
+                paragraph=False,
+                allowlist='0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ'  # License plate chars
+            )
+
+            if not result:
+                return ""
+
+            texts = []
+            for item in result:
+                # Expected: (bbox, text, confidence)
+                if isinstance(item, (list, tuple)) and len(item) >= 3:
+                    text = str(item[1]).strip()
+                    try:
+                        conf = float(item[2])
+                    except Exception:
+                        conf = 0.0
+                    # Use lower threshold (0.2) to catch more potential plates, validate format later
+                    if text and conf >= 0.2:
+                        texts.append(text)
+
+            if not texts:
+                return ""
+
+            normalized = self._normalize_plate_text("".join(texts))
+            return normalized
+        except Exception as e:
+            # Silently fail to avoid disrupting main flow
+            return ""
     
-    def recognize_plate_text(self, frame_original, plate_bbox):
-        """Run OCR on license plate region from original frame
+    def recognize_plate_text(self, frame_original, plate_bbox, heavy_mode=False, veh_track_id=None):
+        """Run OCR on license plate region from original frame - Primary: EasyOCR, Fallback: PaddleOCR
         
         Args:
             frame_original: Original full-size frame
@@ -214,56 +1184,113 @@ class VideoThread(QThread):
         Returns:
             str: Recognized text or empty string
         """
-        if self.ocr is None:
+        if not EASYOCR_AVAILABLE and self.ocr is None:
             return ""
         
         try:
-            x1, y1, x2, y2 = plate_bbox
-            
-            # Ensure valid crop coordinates
-            h, w = frame_original.shape[:2]
-            x1 = max(0, min(x1, w-1))
-            y1 = max(0, min(y1, h-1))
-            x2 = max(x1+1, min(x2, w))
-            y2 = max(y1+1, min(y2, h))
-            
-            # Crop plate region from ORIGINAL frame
-            plate_img = frame_original[y1:y2, x1:x2]
-            
-            if plate_img.size == 0:
+            rois = self._build_plate_rois(frame_original, plate_bbox, heavy_mode=heavy_mode)
+            if self.enable_ocr_debug_logs:
+                x1, y1, x2, y2 = plate_bbox
+                print(f"🔎 OCR input bbox: ({x1},{y1},{x2},{y2}), roi_count={len(rois)}")
+
+            if not rois:
                 return ""
-            
-            # Preprocess for better OCR
-            processed = self.preprocess_plate(plate_img)
-            
-            # Convert grayscale back to BGR for PaddleOCR
-            if len(processed.shape) == 2:
-                processed = cv2.cvtColor(processed, cv2.COLOR_GRAY2BGR)
-            
-            # Run OCR using correct PaddleOCR API
-            result = self.ocr.ocr(processed, cls=False)
-            
-            # PaddleOCR returns list of lines, each with [(bbox, (text, confidence))]
-            if result and len(result) > 0 and result[0]:
-                texts = []
-                scores = []
-                
-                for line in result[0]:
-                    if line and len(line) >= 2:
-                        text_info = line[1]  # (text, confidence)
-                        if isinstance(text_info, (list, tuple)) and len(text_info) >= 2:
-                            text = str(text_info[0]).strip()
-                            conf = float(text_info[1])
-                            
-                            if conf > 0.5:  # Min confidence threshold
-                                texts.append(text)
-                                scores.append(conf)
-                
-                if texts:
-                    final_text = "".join(texts).replace(" ", "").replace(".", "")
-                    return final_text
-            
-            return ""
+
+            cache_seed_img = rois[0][1]
+            reused_text, reused = self._try_reuse_recent_ocr(veh_track_id, cache_seed_img, heavy_mode=heavy_mode)
+            if reused:
+                if self.enable_ocr_debug_logs:
+                    cache_state = "hit_text" if reused_text else "hit_empty"
+                    print(f"🧠 OCR cache {cache_state} for Vehicle ID:{veh_track_id}")
+                return reused_text
+
+            # In heavy traffic, keep heavy OCR on top ROIs only.
+            if heavy_mode and self._ocr_frame_budget <= self.max_ocr_jobs_per_frame_high_traffic:
+                rois = rois[:2]
+
+            quick_mode = not heavy_mode
+            for roi_name, plate_img in rois:
+                bordered = self._add_safe_plate_border(plate_img)
+                # Keep quick pass cheap: rectify only the base ROI.
+                if heavy_mode or roi_name == 'base':
+                    rectified = self._rectify_plate_perspective(bordered)
+                else:
+                    rectified = bordered
+                enhanced_raw = self._enhance_plate_for_readability(bordered, fast_mode=quick_mode)
+                enhanced_rect = self._enhance_plate_for_readability(rectified, fast_mode=quick_mode)
+
+                # Pipeline: crop -> border -> perspective rectify -> readability enhancement -> OCR variants.
+                seed_plan = [
+                    (f"{roi_name}_rect_enh", enhanced_rect),
+                    (f"{roi_name}_raw_enh", enhanced_raw),
+                ]
+                if heavy_mode:
+                    if self._ocr_frame_budget > self.max_ocr_jobs_per_frame_high_traffic:
+                        seed_plan.extend([
+                            (f"{roi_name}_rect", rectified),
+                            (f"{roi_name}_raw", bordered),
+                        ])
+
+                roi_candidates = []
+                for seed_name, seed_img in seed_plan:
+                    if seed_img is None or getattr(seed_img, 'size', 0) == 0:
+                        continue
+                    seed_candidates = self._build_ocr_variants(seed_img, quick_mode=quick_mode)
+                    roi_candidates.extend((f"{seed_name}|{name}", img) for name, img in seed_candidates)
+
+                pass_candidates = self._select_ocr_candidates(roi_candidates, heavy_mode=heavy_mode)
+                if self.enable_ocr_debug_logs:
+                    variant_names = [name for name, _ in pass_candidates]
+                    mode_name = "heavy" if heavy_mode else "quick"
+                    print(f"🧩 OCR variants ({mode_name}, {roi_name}): {variant_names}")
+
+                text = self._recognize_from_candidates(pass_candidates, heavy_mode=heavy_mode)
+                if text:
+                    return self._finalize_ocr_result(veh_track_id, cache_seed_img, text, heavy_mode=heavy_mode)
+
+                # In quick mode, try only base ROI and exit fast.
+                if quick_mode:
+                    break
+
+            # In quick mode, stop early to keep realtime FPS stable.
+            if not heavy_mode:
+                return self._finalize_ocr_result(veh_track_id, cache_seed_img, "", heavy_mode=heavy_mode)
+
+            # Rescue path for hard cases: deskew + enhance + 2-line split OCR.
+            rescue_seed = self._enhance_plate_for_readability(self._add_safe_plate_border(rois[0][1]), fast_mode=False)
+            rescued = self._deskew_plate_image(rescue_seed)
+            rescued_enh = self._enhance_plate_for_readability(rescued, fast_mode=False)
+
+            rescue_candidates = []
+            rescue_candidates.extend((f"rescue_enh|{name}", img) for name, img in self._build_ocr_variants(rescued_enh))
+            rescue_candidates.extend((f"rescue|{name}", img) for name, img in self._build_ocr_variants(rescued))
+            text = self._recognize_from_candidates(rescue_candidates, heavy_mode=True)
+            if text:
+                return self._finalize_ocr_result(veh_track_id, cache_seed_img, text, heavy_mode=heavy_mode)
+
+            # Final fallback: OCR line-by-line for possible 2-line plates.
+            lines = self._split_plate_lines(rescued_enh)
+            if lines:
+                top_text = ""
+                bottom_text = ""
+                for line_name, line_img in lines:
+                    line_enh = self._enhance_plate_for_readability(line_img, fast_mode=False)
+                    line_candidates = self._build_ocr_variants(line_enh)
+                    line_text = self._recognize_from_candidates(line_candidates, heavy_mode=True)
+                    if line_name == 'line_top':
+                        top_text = line_text
+                    else:
+                        bottom_text = line_text
+
+                merged = self._normalize_plate_text(f"{top_text}{bottom_text}")
+                if merged:
+                    if self.enable_ocr_debug_logs:
+                        print(f"✅ OCR rescue merged lines: '{merged}'")
+                    return self._finalize_ocr_result(veh_track_id, cache_seed_img, merged, heavy_mode=heavy_mode)
+
+            if self.enable_ocr_debug_logs:
+                print("⚠️ OCR result: no readable text")
+            return self._finalize_ocr_result(veh_track_id, cache_seed_img, "", heavy_mode=heavy_mode)
             
         except Exception as e:
             # Silently fail OCR errors to not disrupt detection
@@ -277,6 +1304,87 @@ class VideoThread(QThread):
         """
         self.vehicle_tracker.set_ref_angle(ref_angle)
         print(f"🧭 VideoThread: Reference angle set to {ref_angle:.1f}°")
+
+    def set_paused(self, paused):
+        """Pause or resume playback without stopping the processing thread."""
+        with self._playback_lock:
+            self.playback_paused = bool(paused)
+
+    def toggle_paused(self):
+        """Toggle pause state and return the new state."""
+        with self._playback_lock:
+            self.playback_paused = not self.playback_paused
+            return self.playback_paused
+
+    def request_seek_to_seconds(self, target_sec):
+        """Request an absolute seek target in seconds."""
+        safe_target = max(0.0, float(target_sec))
+        with self._playback_lock:
+            if self.video_duration_sec > 0:
+                safe_target = min(safe_target, self.video_duration_sec)
+            self._pending_seek_target_sec = safe_target
+
+    def request_seek_relative(self, delta_sec):
+        """Request seek relative to current playback position."""
+        with self._playback_lock:
+            target = self.current_playback_sec + float(delta_sec)
+            if self.video_duration_sec > 0:
+                target = min(max(0.0, target), self.video_duration_sec)
+            else:
+                target = max(0.0, target)
+            self._pending_seek_target_sec = target
+
+    def _consume_playback_commands(self):
+        """Fetch latest pause/seek commands atomically."""
+        with self._playback_lock:
+            paused = self.playback_paused
+            seek_target = self._pending_seek_target_sec
+            self._pending_seek_target_sec = None
+        return paused, seek_target
+
+    def _emit_playback_info(self, cap, force=False):
+        """Emit playback metadata for UI timeline/labels."""
+        now = time.time()
+        if not force and (now - self._last_playback_emit_time) < 0.08:
+            return
+
+        pos_msec = float(cap.get(cv2.CAP_PROP_POS_MSEC) or 0.0)
+        if pos_msec > 0:
+            current_sec = pos_msec / 1000.0
+        else:
+            frame_idx = float(cap.get(cv2.CAP_PROP_POS_FRAMES) or 0.0)
+            fps_safe = max(1e-6, self.video_fps)
+            current_sec = frame_idx / fps_safe
+
+        with self._playback_lock:
+            self.current_playback_sec = max(0.0, current_sec)
+            paused = self.playback_paused
+
+        info = {
+            'current_sec': self.current_playback_sec,
+            'duration_sec': max(0.0, self.video_duration_sec),
+            'fps': self.video_fps,
+            'paused': paused,
+        }
+        self.playback_info_signal.emit(info)
+        self._last_playback_emit_time = now
+
+    def _apply_seek_request(self, cap, target_sec):
+        """Seek capture and return the fetched frame at the requested position."""
+        fps_safe = max(1e-6, self.video_fps)
+        if self.video_total_frames > 0:
+            target_frame = int(round(target_sec * fps_safe))
+            target_frame = min(max(0, target_frame), self.video_total_frames - 1)
+        else:
+            target_frame = max(0, int(round(target_sec * fps_safe)))
+
+        cap.set(cv2.CAP_PROP_POS_FRAMES, target_frame)
+        ret, frame = cap.read()
+        if not ret:
+            return None
+
+        self.current_playback_sec = target_frame / fps_safe
+        return frame
     
     def run(self):
         """Main video processing loop"""
@@ -287,20 +1395,86 @@ class VideoThread(QThread):
         video_fps = cap.get(cv2.CAP_PROP_FPS)
         if video_fps == 0:
             video_fps = 30
+
+        self.video_fps = float(video_fps)
+        self.video_total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT) or 0)
+        if self.video_total_frames > 0 and self.video_fps > 0:
+            self.video_duration_sec = self.video_total_frames / self.video_fps
+        else:
+            self.video_duration_sec = 0.0
+        self.current_playback_sec = 0.0
+        self._last_playback_emit_time = 0.0
+        self._emit_playback_info(cap, force=True)
         
         frame_interval = 1.0 / video_fps
         next_frame_time = time.time()
+
+        # Render loop runs at a stable and usually lower FPS than detection.
+        effective_display_fps = max(1, self.target_display_fps)
+        if self.stable_display_mode:
+            effective_display_fps = min(effective_display_fps, max(1, self.stable_display_fps))
+        display_interval = 1.0 / effective_display_fps
+        next_display_time = time.time()
+        last_render_frame = None
         
         print(f"📹 Video FPS: {video_fps}, Frame interval: {frame_interval:.4f}s")
         print(f"⏱️ Realtime mode: {'ON (may skip frames)' if self.realtime_mode else 'OFF (process all frames)'}")
-        print(f"🎯 Target display FPS: {self.target_display_fps}")
-        
-        # Display frame interval for limiting GUI updates
-        display_interval = 1.0 / self.target_display_fps
-        last_display_time = 0
+        print(f"🎯 Display FPS: target={self.target_display_fps}, render={effective_display_fps}")
         
         while self._run_flag:
             current_time = time.time()
+
+            # Track FPS on a fixed interval (display and detection are measured separately).
+            elapsed = current_time - self.fps_start_time
+            if elapsed >= self.runtime_fps_log_interval_sec:
+                self.fps = int(round(self.display_count / max(elapsed, 1e-6)))
+                self.processed_fps = int(round(self.processed_count / max(elapsed, 1e-6)))
+                if self.enable_runtime_fps_logs:
+                    if self.realtime_mode:
+                        print(f"📊 Display FPS: {self.fps} | Detection FPS: {self.processed_fps} | Skipped: {self.skipped_frames}")
+                    else:
+                        print(f"📊 Display FPS: {self.fps} | Detection FPS: {self.processed_fps}")
+                self.frame_count = 0
+                self.display_count = 0
+                self.processed_count = 0
+                self.skipped_frames = 0
+                self.fps_start_time = current_time
+
+            paused, seek_target_sec = self._consume_playback_commands()
+            if seek_target_sec is not None:
+                seek_frame = self._apply_seek_request(cap, seek_target_sec)
+                if seek_frame is not None:
+                    if self.detection_enabled and self.model is not None and self.model_loaded:
+                        try:
+                            seek_frame = self.process_detection(seek_frame)
+                            self.processed_count += 1
+                        except Exception as e:
+                            print(f"⚠️ Detection error during seek: {e}")
+                            self.error_signal.emit(str(e))
+                            self.detection_enabled = False
+
+                    last_render_frame = seek_frame
+                    self.change_pixmap_signal.emit(last_render_frame)
+                    self.display_count += 1
+
+                now = time.time()
+                next_frame_time = now + frame_interval
+                next_display_time = now + display_interval
+                self._emit_playback_info(cap, force=True)
+
+            if paused:
+                if (self.repeat_last_frame_for_smoothness and
+                    last_render_frame is not None and
+                    current_time >= next_display_time):
+                    self.change_pixmap_signal.emit(last_render_frame)
+                    self.display_count += 1
+                    next_display_time += display_interval
+                    if next_display_time < current_time - display_interval:
+                        next_display_time = current_time + display_interval
+
+                self._emit_playback_info(cap)
+                self.msleep(12)
+                continue
             
             if self.realtime_mode:
                 # REALTIME MODE: Skip frames to match real-time
@@ -308,16 +1482,6 @@ class VideoThread(QThread):
                     ret, frame = cap.read()
                     if ret:
                         self.frame_count += 1
-                        
-                        # Track FPS
-                        if time.time() - self.fps_start_time >= 1.0:
-                            self.fps = self.frame_count
-                            self.processed_fps = self.processed_count
-                            print(f"📊 Display FPS: {self.fps} | Detection FPS: {self.processed_fps} | Skipped: {self.skipped_frames}")
-                            self.frame_count = 0
-                            self.processed_count = 0
-                            self.skipped_frames = 0
-                            self.fps_start_time = time.time()
                         
                         if self.detection_enabled and self.model is not None and self.model_loaded:
                             try:
@@ -327,11 +1491,16 @@ class VideoThread(QThread):
                                 print(f"⚠️ Detection error: {e}")
                                 self.error_signal.emit(str(e))
                                 self.detection_enabled = False
-                        
-                        # Only emit to GUI at target display FPS to reduce CPU
-                        if current_time - last_display_time >= display_interval:
-                            self.change_pixmap_signal.emit(frame)
-                            last_display_time = current_time
+
+                        # Stable render cadence: detection can run fast/slow independently.
+                        last_render_frame = frame
+                        if current_time >= next_display_time:
+                            self.change_pixmap_signal.emit(last_render_frame)
+                            self.display_count += 1
+                            next_display_time += display_interval
+                            if next_display_time < current_time - display_interval:
+                                next_display_time = current_time + display_interval
+                        self._emit_playback_info(cap)
                         
                         next_frame_time += frame_interval
                         
@@ -343,24 +1512,30 @@ class VideoThread(QThread):
                         cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                         self._clear_all_state()
                         next_frame_time = time.time()
+                        next_display_time = next_frame_time
+                        self.current_playback_sec = 0.0
+                        self._emit_playback_info(cap, force=True)
                 else:
                     self.skipped_frames += 1  # Count skipped frames
-                    # ⚠️ PERFORMANCE: Sleep 10ms instead of 1ms to reduce CPU spin
-                    self.msleep(10)
+
+                    # Keep UI smooth by replaying the latest rendered frame at fixed cadence.
+                    if (self.repeat_last_frame_for_smoothness and
+                        last_render_frame is not None and
+                        current_time >= next_display_time):
+                        self.change_pixmap_signal.emit(last_render_frame)
+                        self.display_count += 1
+                        next_display_time += display_interval
+                        if next_display_time < current_time - display_interval:
+                            next_display_time = current_time + display_interval
+                        self._emit_playback_info(cap)
+                    else:
+                        # Short sleep reduces spin while preserving realtime responsiveness.
+                        self.msleep(6)
             else:
                 # FULL PROCESSING MODE: Process every frame (no skip)
                 ret, frame = cap.read()
                 if ret:
                     self.frame_count += 1
-                    
-                    # Track FPS
-                    if time.time() - self.fps_start_time >= 1.0:
-                        self.fps = self.frame_count
-                        self.processed_fps = self.processed_count
-                        print(f"📊 Display FPS: {self.fps} | Detection FPS: {self.processed_fps}")
-                        self.frame_count = 0
-                        self.processed_count = 0
-                        self.fps_start_time = time.time()
                     
                     if self.detection_enabled and self.model is not None and self.model_loaded:
                         try:
@@ -370,11 +1545,15 @@ class VideoThread(QThread):
                             print(f"⚠️ Detection error: {e}")
                             self.error_signal.emit(str(e))
                             self.detection_enabled = False
-                    
-                    # Only emit to GUI at target display FPS
-                    if current_time - last_display_time >= display_interval:
-                        self.change_pixmap_signal.emit(frame)
-                        last_display_time = current_time
+
+                    last_render_frame = frame
+                    if current_time >= next_display_time:
+                        self.change_pixmap_signal.emit(last_render_frame)
+                        self.display_count += 1
+                        next_display_time += display_interval
+                        if next_display_time < current_time - display_interval:
+                            next_display_time = current_time + display_interval
+                    self._emit_playback_info(cap)
                     
                     # ⚠️ PERFORMANCE: Small sleep to yield CPU
                     self.msleep(5)
@@ -382,6 +1561,9 @@ class VideoThread(QThread):
                     # Video ended, loop back
                     cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
                     self._clear_all_state()
+                    next_display_time = time.time()
+                    self.current_playback_sec = 0.0
+                    self._emit_playback_info(cap, force=True)
             
         cap.release()
     
@@ -393,6 +1575,17 @@ class VideoThread(QThread):
         
         # Clear license plate positions
         self.vehicle_plate_positions.clear()
+        self.vehicle_ocr_texts.clear()
+        self.vehicle_stable_plates.clear()
+        self.vehicle_plate_smoothing.clear()
+        self.vehicle_ocr_votes.clear()
+        self.vehicle_ocr_history.clear()
+        self.vehicle_to_plate_map.clear()
+        self.vehicle_ocr_attempts.clear()
+        self.vehicle_last_ocr_frame.clear()
+        self.vehicle_ocr_signature_cache.clear()
+        self._ocr_jobs_this_frame = 0
+        self._ocr_frame_budget = self.max_ocr_jobs_per_frame
         self.current_frame_count = 0
         
         # Also clear global sets for backward compatibility
@@ -403,6 +1596,222 @@ class VideoThread(QThread):
             self.globals_ref['PASSED_VEHICLES'].clear()
             self.globals_ref['MOTORBIKE_COUNT'].clear()
             self.globals_ref['CAR_COUNT'].clear()
+
+    def _update_ocr_frame_budget(self, vehicle_count, plate_count):
+        """Adapt per-frame OCR budget to scene load to avoid frame-time spikes."""
+        if not self.enable_ocr:
+            self._ocr_frame_budget = 0
+            return
+
+        load_count = max(vehicle_count, plate_count)
+        if load_count >= self.ocr_high_traffic_vehicle_threshold:
+            self._ocr_frame_budget = self.max_ocr_jobs_per_frame_high_traffic
+        elif load_count >= self.ocr_medium_traffic_vehicle_threshold:
+            self._ocr_frame_budget = self.max_ocr_jobs_per_frame
+        else:
+            self._ocr_frame_budget = self.max_ocr_jobs_per_frame_low_traffic
+
+    def _should_attempt_ocr(self, veh_track_id, plate_w, plate_h):
+        """Return True when OCR should run for this vehicle in current frame."""
+        if not self.enable_ocr:
+            return False
+
+        if plate_w < self.min_ocr_plate_width or plate_h < self.min_ocr_plate_height:
+            return False
+
+        if self._ocr_jobs_this_frame >= self._ocr_frame_budget:
+            return False
+
+        has_stable_plate = bool(self.vehicle_stable_plates.get(veh_track_id))
+        every_n_frames = self.ocr_process_every_n_frames if has_stable_plate else self.ocr_bootstrap_every_n_frames
+        retry_interval = self.ocr_retry_interval_frames if has_stable_plate else self.ocr_bootstrap_retry_interval_frames
+
+        # Spread OCR calls over frames to reduce spikes.
+        slot = veh_track_id % every_n_frames
+        if (self.current_frame_count % every_n_frames) != slot:
+            return False
+
+        attempts = self.vehicle_ocr_attempts.get(veh_track_id, 0)
+        if attempts >= self.max_ocr_attempts_per_vehicle:
+            return False
+
+        last_frame = self.vehicle_last_ocr_frame.get(veh_track_id, -10**9)
+        return (self.current_frame_count - last_frame) >= retry_interval
+
+    def _get_ocr_skip_reason(self, veh_track_id, plate_w, plate_h):
+        """Return human-readable reason when OCR is skipped."""
+        if not self.enable_ocr:
+            return "OCR disabled"
+
+        if plate_w < self.min_ocr_plate_width or plate_h < self.min_ocr_plate_height:
+            return f"plate too small ({plate_w}x{plate_h})"
+
+        if self._ocr_jobs_this_frame >= self._ocr_frame_budget:
+            return f"frame OCR budget reached ({self._ocr_frame_budget})"
+
+        has_stable_plate = bool(self.vehicle_stable_plates.get(veh_track_id))
+        every_n_frames = self.ocr_process_every_n_frames if has_stable_plate else self.ocr_bootstrap_every_n_frames
+        retry_interval = self.ocr_retry_interval_frames if has_stable_plate else self.ocr_bootstrap_retry_interval_frames
+
+        slot = veh_track_id % every_n_frames
+        if (self.current_frame_count % every_n_frames) != slot:
+            return f"frame slot skip (every {every_n_frames} frames)"
+
+        attempts = self.vehicle_ocr_attempts.get(veh_track_id, 0)
+        if attempts >= self.max_ocr_attempts_per_vehicle:
+            return f"max attempts reached ({attempts})"
+
+        last_frame = self.vehicle_last_ocr_frame.get(veh_track_id, -10**9)
+        wait_left = retry_interval - (self.current_frame_count - last_frame)
+        if wait_left > 0:
+            return f"retry cooldown ({wait_left} frames left)"
+
+        return "unknown"
+
+    def _is_loose_ocr_candidate(self, plate_text):
+        """Allow near-valid OCR strings to be stabilized when strict parser fails."""
+        cleaned = _sanitize_ocr_text(plate_text)
+        if len(cleaned) < 8 or len(cleaned) > 10:
+            return False
+        if not cleaned[:2].isdigit():
+            return False
+        digit_count = sum(ch.isdigit() for ch in cleaned)
+        return digit_count >= 6
+
+    def _register_plate_vote(self, veh_track_id, plate_text):
+        """Register a validated plate observation and return the current best vote."""
+        if not plate_text:
+            return ""
+
+        history = self.vehicle_ocr_history.setdefault(veh_track_id, [])
+        history.append(plate_text)
+        if len(history) > self.max_ocr_history_per_vehicle:
+            del history[0]
+
+        vehicle_votes = self.vehicle_ocr_votes.setdefault(veh_track_id, {})
+        vote_entry = vehicle_votes.get(plate_text, {'count': 0, 'last_frame': 0})
+        vote_entry['count'] += 1
+        vote_entry['last_frame'] = self.current_frame_count
+        vehicle_votes[plate_text] = vote_entry
+
+        # Recompute soft vote from recent history only (bounded memory).
+        recent_scores = defaultdict(float)
+        for idx, candidate in enumerate(history):
+            # Recent observations get slightly higher weight.
+            recent_scores[candidate] += 1.0 + (idx / max(1, len(history))) * 0.2
+
+        best_plate = max(recent_scores.items(), key=lambda item: (item[1], -history[::-1].index(item[0])))[0]
+        return best_plate
+
+    def _update_stable_plate(self, veh_track_id, canonical_plate):
+        """Update stable per-vehicle plate only after consecutive-frame confirmation.
+
+        Returns the stable plate if one exists; otherwise returns an empty string.
+        """
+        if not canonical_plate:
+            return self.vehicle_stable_plates.get(veh_track_id, '')
+
+        best_plate = self._register_plate_vote(veh_track_id, canonical_plate)
+
+        smoothing = self.vehicle_plate_smoothing.get(veh_track_id, {
+            'candidate': '',
+            'streak': 0,
+            'last_frame': -10**9,
+        })
+
+        if smoothing['candidate'] == best_plate:
+            smoothing['streak'] += 1
+        else:
+            smoothing['candidate'] = best_plate
+            smoothing['streak'] = 1
+
+        smoothing['last_frame'] = self.current_frame_count
+        self.vehicle_plate_smoothing[veh_track_id] = smoothing
+
+        stable_plate = self.vehicle_stable_plates.get(veh_track_id, '')
+        if not stable_plate:
+            if smoothing['streak'] >= self.plate_initial_confirm_frames:
+                self.vehicle_stable_plates[veh_track_id] = best_plate
+                return best_plate
+            return ''
+
+        if best_plate == stable_plate:
+            return stable_plate
+
+        if smoothing['streak'] >= self.plate_switch_confirm_frames:
+            self.vehicle_stable_plates[veh_track_id] = best_plate
+            return best_plate
+
+        return stable_plate
+
+    def _build_ocr_variants(self, plate_img, quick_mode=False):
+        """Create several OCR-ready image variants from a plate crop."""
+        variants = []
+
+        def add_variant(name, img):
+            if img is not None and getattr(img, 'size', 0) > 0:
+                variants.append((name, img))
+
+        original_bgr = plate_img if len(plate_img.shape) == 3 else cv2.cvtColor(plate_img, cv2.COLOR_GRAY2BGR)
+        add_variant('original', original_bgr)
+
+        # Basic grayscale / equalization / sharpening family.
+        gray = cv2.cvtColor(original_bgr, cv2.COLOR_BGR2GRAY)
+        add_variant('gray', cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR))
+
+        if quick_mode:
+            clahe_fast = cv2.createCLAHE(clipLimit=2.6, tileGridSize=(8, 8)).apply(gray)
+            add_variant('clahe', cv2.cvtColor(clahe_fast, cv2.COLOR_GRAY2BGR))
+
+            otsu_fast = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+            add_variant('otsu', cv2.cvtColor(otsu_fast, cv2.COLOR_GRAY2BGR))
+
+            ph, pw = original_bgr.shape[:2]
+            if ph < 44 or pw < 140:
+                scaled = cv2.resize(original_bgr, None, fx=2.0, fy=2.0, interpolation=cv2.INTER_CUBIC)
+                add_variant('original_x2', scaled)
+
+            return variants
+
+        eq = cv2.equalizeHist(gray)
+        add_variant('equalized', cv2.cvtColor(eq, cv2.COLOR_GRAY2BGR))
+
+        clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(gray)
+        add_variant('clahe', cv2.cvtColor(clahe, cv2.COLOR_GRAY2BGR))
+
+        denoised = cv2.fastNlMeansDenoising(gray, None, 15, 7, 21)
+        add_variant('denoised', cv2.cvtColor(denoised, cv2.COLOR_GRAY2BGR))
+
+        sharpen_kernel = np.array([[-1, -1, -1], [-1, 9, -1], [-1, -1, -1]])
+        sharpened = cv2.filter2D(gray, -1, sharpen_kernel)
+        add_variant('sharpened', cv2.cvtColor(sharpened, cv2.COLOR_GRAY2BGR))
+
+        # Threshold variants help with glare / low contrast frames.
+        adaptive = cv2.adaptiveThreshold(gray, 255, cv2.ADAPTIVE_THRESH_GAUSSIAN_C,
+                                         cv2.THRESH_BINARY, 31, 7)
+        add_variant('adaptive', cv2.cvtColor(adaptive, cv2.COLOR_GRAY2BGR))
+
+        otsu = cv2.threshold(gray, 0, 255, cv2.THRESH_BINARY + cv2.THRESH_OTSU)[1]
+        add_variant('otsu', cv2.cvtColor(otsu, cv2.COLOR_GRAY2BGR))
+
+        # Keep the default path lightweight; heavy upscaling only for tiny crops.
+        ph, pw = original_bgr.shape[:2]
+        if ph < 50 or pw < 160:
+            for scale in (2.0, 4.0):
+                scaled_original = cv2.resize(original_bgr, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+                add_variant(f'original_x{int(scale)}', scaled_original)
+
+                scaled_gray = cv2.resize(gray, None, fx=scale, fy=scale, interpolation=cv2.INTER_CUBIC)
+                scaled_clahe = cv2.createCLAHE(clipLimit=3.0, tileGridSize=(8, 8)).apply(scaled_gray)
+                add_variant(f'clahe_x{int(scale)}', cv2.cvtColor(scaled_clahe, cv2.COLOR_GRAY2BGR))
+
+                scaled_sharp = cv2.filter2D(scaled_gray, -1, sharpen_kernel)
+                add_variant(f'sharpened_x{int(scale)}', cv2.cvtColor(scaled_sharp, cv2.COLOR_GRAY2BGR))
+        else:
+            # For normal-size crops, keep a medium set for better OCR quality.
+            variants = [v for v in variants if v[0] in {'original', 'gray', 'clahe', 'otsu', 'adaptive', 'sharpened'}]
+
+        return variants
     
     def set_model(self, model):
         """Set pre-loaded model from main thread"""
@@ -430,8 +1839,9 @@ class VideoThread(QThread):
         # Debug: First call
         if not hasattr(self, '_debug_first_detection'):
             self._debug_first_detection = True
-            print(f"✅ First detection call - Frame size: {orig_w}x{orig_h}")
-            print(f"   Model config: {self.model_config}")
+            if self.enable_perf_logs:
+                print(f"✅ First detection call - Frame size: {orig_w}x{orig_h}")
+                print(f"   Model config: {self.model_config}")
         
         # Get global state references
         ALLOWED_VEHICLE_IDS = self.globals_ref['ALLOWED_VEHICLE_IDS']
@@ -454,12 +1864,12 @@ class VideoThread(QThread):
         CAR_COUNT = self.globals_ref['CAR_COUNT']
         
         # Get model config or use defaults
-        imgsz = 416
+        imgsz = 640
         conf = 0.3
         classes = [0, 1, 3, 4]
         
         if self.model_config:
-            imgsz = self.model_config.get('default_imgsz', 416)
+            imgsz = self.model_config.get('default_imgsz', 640)
             conf = self.model_config.get('default_conf', 0.3)
             classes = self.model_config.get('classes', [0, 1, 3, 4])
         
@@ -472,7 +1882,9 @@ class VideoThread(QThread):
             classes=classes,
             verbose=False,
             imgsz=imgsz,
-            conf=conf
+            conf=conf,
+            device=self.yolo_device,
+            half=self.yolo_half
         )
         
         # Calculate scale factors from YOLO resized size back to original
@@ -510,18 +1922,37 @@ class VideoThread(QThread):
         # === MAP LICENSE PLATES TO VEHICLES ===
         # Works for both YOLO Direct and Relative Tracking modes
         self.current_frame_count += 1
+        self._ocr_jobs_this_frame = 0
+        self._update_ocr_frame_budget(len(vehicles), len(license_plates))
         
         # Debug: Log detections periodically
-        if not hasattr(self, '_debug_frame_count'):
-            self._debug_frame_count = 0
-        self._debug_frame_count += 1
-        if self._debug_frame_count % 30 == 0:  # Every 30 frames
-            print(f"📊 Detection stats: {len(vehicles)} vehicles, {len(license_plates)} plates")
+        if self.enable_perf_logs:
+            if not hasattr(self, '_debug_frame_count'):
+                self._debug_frame_count = 0
+            self._debug_frame_count += 1
+            if self._debug_frame_count % 30 == 0:  # Every 30 frames
+                print(
+                    f"📊 Detection stats: {len(vehicles)} vehicles, {len(license_plates)} plates, "
+                    f"ocr budget={self._ocr_frame_budget}, used={self._ocr_jobs_this_frame}"
+                )
         
         current_vehicle_ids = set()
         for veh in vehicles:
             if veh["track_id"] != -1:
                 current_vehicle_ids.add(veh["track_id"])
+
+        # Prioritize clearer/bigger plate detections so limited OCR budget is spent effectively.
+        license_plates.sort(
+            key=lambda p: (
+                self._compute_plate_priority(
+                    p["box"][2] - p["box"][0],
+                    p["box"][3] - p["box"][1],
+                    p.get("conf", 0.0),
+                ),
+                p.get("conf", 0.0),
+            ),
+            reverse=True,
+        )
         
         # Check each detected plate
         for plate in license_plates:
@@ -531,8 +1962,11 @@ class VideoThread(QThread):
             plate_w = plate_x2 - plate_x1
             plate_h = plate_y2 - plate_y1
             
-            # Find which vehicle contains this plate (100% inside)
+            # Find vehicle candidates that fully contain this plate.
+            # If multiple vehicles contain it, keep mapping stable by preferring
+            # previous mapping for this plate track; otherwise use tightest bbox.
             best_match = None
+            candidate_matches = []
             
             for veh in vehicles:
                 veh_x1, veh_y1, veh_x2, veh_y2 = veh["box"]
@@ -545,9 +1979,28 @@ class VideoThread(QThread):
                 # All 4 corners of plate must be within vehicle bounds
                 if (plate_x1 >= veh_x1 and plate_x2 <= veh_x2 and 
                     plate_y1 >= veh_y1 and plate_y2 <= veh_y2):
-                    # Plate is completely inside this vehicle
-                    best_match = veh
-                    break  # Found valid match, no need to check others
+                    veh_area = max(1, (veh_x2 - veh_x1) * (veh_y2 - veh_y1))
+                    candidate_matches.append((veh_area, veh))
+
+            if candidate_matches:
+                plate_track_id = plate["track_id"]
+
+                # 1) Prefer old vehicle-id mapping for this same plate track id.
+                preferred_vehicle_id = None
+                for mapped_veh_id, mapped_plate_id in self.vehicle_to_plate_map.items():
+                    if mapped_plate_id == plate_track_id and mapped_veh_id in current_vehicle_ids:
+                        preferred_vehicle_id = mapped_veh_id
+                        break
+
+                if preferred_vehicle_id is not None:
+                    for _, veh in candidate_matches:
+                        if veh["track_id"] == preferred_vehicle_id:
+                            best_match = veh
+                            break
+
+                # 2) Fallback: choose tightest vehicle bbox around plate.
+                if best_match is None:
+                    best_match = min(candidate_matches, key=lambda item: item[0])[1]
             
             # If found matching vehicle (plate 100% inside)
             if best_match:
@@ -565,8 +2018,8 @@ class VideoThread(QThread):
                         plate_track_id = plate["track_id"]
                         self.vehicle_to_plate_map[veh_track_id] = plate_track_id
                         
-                        # Debug: Print mapping info
-                        print(f"📍 Mapped Plate ID:{plate_track_id} → Vehicle ID:{veh_track_id}")
+                        if self.enable_ocr_debug_logs:
+                            print(f"📍 Mapped Plate ID:{plate_track_id} → Vehicle ID:{veh_track_id}")
                         
                         # Check if vehicle already has VALID OCR text (not empty string)
                         existing_plate = self.vehicle_ocr_texts.get(veh_track_id)
@@ -574,25 +2027,58 @@ class VideoThread(QThread):
                             # Already have valid plate, skip OCR
                             pass
                         else:
-                            print(f"🔍 Attempting OCR for Vehicle ID:{veh_track_id} (ocr={self.ocr is not None}, enable_ocr={self.enable_ocr})")
-                            # Run OCR on plate (crop from original frame)
-                            if self.ocr is not None and self.enable_ocr:
+                            should_ocr = self._should_attempt_ocr(veh_track_id, plate_w, plate_h)
+                            if should_ocr:
+                                self.vehicle_last_ocr_frame[veh_track_id] = self.current_frame_count
+                                self.vehicle_ocr_attempts[veh_track_id] = self.vehicle_ocr_attempts.get(veh_track_id, 0) + 1
+                                self._ocr_jobs_this_frame += 1
+
+                                attempt_no = self.vehicle_ocr_attempts[veh_track_id]
+                                plate_priority = self._compute_plate_priority(plate_w, plate_h, plate.get("conf", 0.0))
+                                heavy_mode = self._should_use_heavy_ocr(attempt_no, plate_priority)
+
+                                if self.enable_ocr_debug_logs:
+                                    print(
+                                        f"🔍 Attempting OCR for Vehicle ID:{veh_track_id} "
+                                        f"(attempt={attempt_no}, heavy={heavy_mode}, priority={plate_priority:.2f})"
+                                    )
+
                                 plate_bbox = (int(plate_x1), int(plate_y1), int(plate_x2), int(plate_y2))
-                                ocr_text = self.recognize_plate_text(frame_original, plate_bbox)
+                                ocr_text = self.recognize_plate_text(
+                                    frame_original,
+                                    plate_bbox,
+                                    heavy_mode=heavy_mode,
+                                    veh_track_id=veh_track_id,
+                                )
                                 if ocr_text:
-                                    # Validate plate format based on vehicle class
-                                    is_valid, cleaned_plate = validate_license_plate(ocr_text, veh_cls_id)
+                                    # Step 1: Correct character confusion (0↔O, 1↔I, 8↔B, etc.)
+                                    corrected_text = correct_plate_characters(ocr_text)
+                                    # Step 2: Validate plate format based on vehicle class
+                                    is_valid, cleaned_plate = validate_license_plate(corrected_text, veh_cls_id)
                                     if is_valid:
-                                        self.vehicle_ocr_texts[veh_track_id] = cleaned_plate
-                                        print(f"✅ OCR [VALID] Vehicle ID:{veh_track_id} → '{cleaned_plate}'")
-                                    else:
-                                        # Invalid plate format, don't store, try again next frame
-                                        print(f"❌ OCR [INVALID FORMAT] Vehicle ID:{veh_track_id} → '{ocr_text}' (cleaned: '{cleaned_plate}')")
-                                else:
-                                    # No text detected, don't mark as attempted so we can try again
-                                    print(f"⚠️ OCR [NO TEXT] Vehicle ID:{veh_track_id} → Retrying next frame")
-                            else:
-                                print(f"❌ OCR disabled or not initialized")
+                                        stable_plate = self._update_stable_plate(veh_track_id, cleaned_plate)
+                                        if stable_plate:
+                                            formatted_plate = format_vietnamese_plate(stable_plate)
+                                            self.vehicle_ocr_texts[veh_track_id] = formatted_plate
+                                            if self.enable_perf_logs:
+                                                if corrected_text != ocr_text:
+                                                    print(f"✅ OCR [CORRECTED] Vehicle ID:{veh_track_id} → '{ocr_text}' → '{formatted_plate}'")
+                                                else:
+                                                    print(f"✅ OCR [VALID] Vehicle ID:{veh_track_id} → '{formatted_plate}'")
+                                        elif self.enable_ocr_debug_logs:
+                                            print(f"⏳ OCR [WAIT STABLE] Vehicle ID:{veh_track_id} → '{cleaned_plate}'")
+                                    elif self._is_loose_ocr_candidate(cleaned_plate):
+                                        stable_plate = self._update_stable_plate(veh_track_id, cleaned_plate)
+                                        if stable_plate:
+                                            formatted_plate = format_vietnamese_plate(stable_plate)
+                                            self.vehicle_ocr_texts[veh_track_id] = formatted_plate
+                                            if self.enable_ocr_debug_logs:
+                                                print(f"🟡 OCR [LOOSE ACCEPT] Vehicle ID:{veh_track_id} → '{formatted_plate}'")
+                                    elif self.enable_ocr_debug_logs:
+                                        print(f"❌ OCR [INVALID FORMAT] Vehicle ID:{veh_track_id} → '{ocr_text}' → '{corrected_text}' (cleaned: '{cleaned_plate}')")
+                            elif self.enable_ocr_debug_logs:
+                                reason = self._get_ocr_skip_reason(veh_track_id, plate_w, plate_h)
+                                print(f"⏭️ OCR skipped Vehicle ID:{veh_track_id}: {reason}")
                     
                     # === RELATIVE TRACKING MODE: Calculate position and run OCR ===
                     else:
@@ -622,17 +2108,47 @@ class VideoThread(QThread):
                                 ocr_text = self.vehicle_plate_positions[veh_track_id].get('ocr_text', '')
                             
                             # Only run OCR if no valid text exists yet AND OCR is enabled
-                            if not ocr_text and self.ocr is not None and self.enable_ocr:
+                            if not ocr_text and self._should_attempt_ocr(veh_track_id, plate_w, plate_h):
+                                self.vehicle_last_ocr_frame[veh_track_id] = self.current_frame_count
+                                self.vehicle_ocr_attempts[veh_track_id] = self.vehicle_ocr_attempts.get(veh_track_id, 0) + 1
+                                self._ocr_jobs_this_frame += 1
+                                attempt_no = self.vehicle_ocr_attempts[veh_track_id]
+                                plate_priority = self._compute_plate_priority(plate_w, plate_h, plate.get("conf", 0.0))
+                                heavy_mode = self._should_use_heavy_ocr(attempt_no, plate_priority)
                                 plate_bbox = (int(plate_x1), int(plate_y1), int(plate_x2), int(plate_y2))
-                                raw_ocr_text = self.recognize_plate_text(frame_original, plate_bbox)
+                                raw_ocr_text = self.recognize_plate_text(
+                                    frame_original,
+                                    plate_bbox,
+                                    heavy_mode=heavy_mode,
+                                    veh_track_id=veh_track_id,
+                                )
                                 if raw_ocr_text:
-                                    # Validate plate format based on vehicle class
-                                    is_valid, cleaned_plate = validate_license_plate(raw_ocr_text, veh_cls_id)
+                                    # Step 1: Correct character confusion
+                                    corrected_text = correct_plate_characters(raw_ocr_text)
+                                    # Step 2: Validate plate format based on vehicle class
+                                    is_valid, cleaned_plate = validate_license_plate(corrected_text, veh_cls_id)
                                     if is_valid:
-                                        ocr_text = cleaned_plate
-                                        print(f"✅ OCR [Relative VALID] Vehicle ID:{veh_track_id} → '{cleaned_plate}'")
-                                    else:
-                                        print(f"❌ OCR [Relative INVALID] Vehicle ID:{veh_track_id} → '{raw_ocr_text}' (retry next frame)")
+                                        stable_plate = self._update_stable_plate(veh_track_id, cleaned_plate)
+                                        if stable_plate:
+                                            ocr_text = format_vietnamese_plate(stable_plate)
+                                            if self.enable_perf_logs:
+                                                if corrected_text != raw_ocr_text:
+                                                    print(f"✅ OCR [Relative CORRECTED] Vehicle ID:{veh_track_id} → '{raw_ocr_text}' → '{ocr_text}'")
+                                                else:
+                                                    print(f"✅ OCR [Relative VALID] Vehicle ID:{veh_track_id} → '{ocr_text}'")
+                                        elif self.enable_ocr_debug_logs:
+                                            print(f"⏳ OCR [Relative WAIT STABLE] Vehicle ID:{veh_track_id} → '{cleaned_plate}'")
+                                    elif self._is_loose_ocr_candidate(cleaned_plate):
+                                        stable_plate = self._update_stable_plate(veh_track_id, cleaned_plate)
+                                        if stable_plate:
+                                            ocr_text = format_vietnamese_plate(stable_plate)
+                                            if self.enable_ocr_debug_logs:
+                                                print(f"🟡 OCR [Relative LOOSE ACCEPT] Vehicle ID:{veh_track_id} → '{ocr_text}'")
+                                    elif self.enable_ocr_debug_logs:
+                                        print(f"❌ OCR [Relative INVALID] Vehicle ID:{veh_track_id} → '{raw_ocr_text}' → '{corrected_text}' (retry next frame)")
+                            elif not ocr_text and self.enable_ocr_debug_logs:
+                                reason = self._get_ocr_skip_reason(veh_track_id, plate_w, plate_h)
+                                print(f"⏭️ OCR [Relative] skipped Vehicle ID:{veh_track_id}: {reason}")
                             
                             # Store or update relative position
                             self.vehicle_plate_positions[veh_track_id] = {
@@ -644,6 +2160,8 @@ class VideoThread(QThread):
                                 'last_updated_frame': self.current_frame_count,
                                 'ocr_text': ocr_text  # OCR recognized text (only if valid)
                             }
+            elif self.enable_ocr_debug_logs:
+                print(f"⚠️ Plate ID:{plate['track_id']} not mapped to vehicle (not fully inside any vehicle bbox)")
         
         # Clean up plates for vehicles that are no longer tracked
         if self.use_plate_relative_tracking:
@@ -655,9 +2173,27 @@ class VideoThread(QThread):
             for veh_id in list(self.vehicle_ocr_texts.keys()):
                 if veh_id not in current_vehicle_ids:
                     del self.vehicle_ocr_texts[veh_id]
+            for veh_id in list(self.vehicle_stable_plates.keys()):
+                if veh_id not in current_vehicle_ids:
+                    del self.vehicle_stable_plates[veh_id]
+            for veh_id in list(self.vehicle_plate_smoothing.keys()):
+                if veh_id not in current_vehicle_ids:
+                    del self.vehicle_plate_smoothing[veh_id]
+            for veh_id in list(self.vehicle_ocr_votes.keys()):
+                if veh_id not in current_vehicle_ids:
+                    del self.vehicle_ocr_votes[veh_id]
+            for veh_id in list(self.vehicle_ocr_history.keys()):
+                if veh_id not in current_vehicle_ids:
+                    del self.vehicle_ocr_history[veh_id]
             for veh_id in list(self.vehicle_to_plate_map.keys()):
                 if veh_id not in current_vehicle_ids:
                     del self.vehicle_to_plate_map[veh_id]
+            for veh_id in list(self.vehicle_ocr_attempts.keys()):
+                if veh_id not in current_vehicle_ids:
+                    del self.vehicle_ocr_attempts[veh_id]
+            for veh_id in list(self.vehicle_last_ocr_frame.keys()):
+                if veh_id not in current_vehicle_ids:
+                    del self.vehicle_last_ocr_frame[veh_id]
         
         # Process vehicles with direction detection
         for veh in vehicles:
@@ -949,4 +2485,7 @@ class VideoThread(QThread):
     def stop(self):
         """Stop the thread"""
         self._run_flag = False
+        with self._playback_lock:
+            self.playback_paused = False
+            self._pending_seek_target_sec = None
         self.wait()

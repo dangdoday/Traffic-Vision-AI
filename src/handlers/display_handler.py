@@ -6,7 +6,8 @@ import sys
 import cv2
 import numpy as np
 import math
-from PyQt5.QtGui import QImage, QPixmap
+from PyQt5.QtCore import Qt
+from PyQt5.QtGui import QImage, QPixmap, QPainter
 
 
 class DisplayHandlerMixin:
@@ -134,25 +135,64 @@ class DisplayHandlerMixin:
         h, w, ch = rgb_image.shape
         bytes_per_line = ch * w
         qt_image = QImage(rgb_image.data, w, h, bytes_per_line, QImage.Format_RGB888)
-        
-        # Scale to fit label while maintaining aspect ratio
-        scaled_pixmap = QPixmap.fromImage(qt_image).scaled(
-            self.video_label.width(), 
-            self.video_label.height(), 
+
+        fit_scale = min(
+            self.video_label.width() / max(1, w),
+            self.video_label.height() / max(1, h)
+        )
+        zoom_factor = max(1.0, float(getattr(self, 'video_zoom_factor', 1.0)))
+        effective_scale = fit_scale * zoom_factor
+
+        scaled_w = max(1, int(round(w * effective_scale)))
+        scaled_h = max(1, int(round(h * effective_scale)))
+
+        zoomed_pixmap = QPixmap.fromImage(qt_image).scaled(
+            scaled_w,
+            scaled_h,
             aspectRatioMode=1  # Keep aspect ratio
         )
-        
+
+        if not hasattr(self, 'video_pan_x'):
+            self.video_pan_x = 0.0
+        if not hasattr(self, 'video_pan_y'):
+            self.video_pan_y = 0.0
+
+        viewport_w = max(1, self.video_label.width())
+        viewport_h = max(1, self.video_label.height())
+
+        max_pan_x = max(0, scaled_w - viewport_w)
+        max_pan_y = max(0, scaled_h - viewport_h)
+        self.video_pan_x = min(max(0.0, float(self.video_pan_x)), float(max_pan_x))
+        self.video_pan_y = min(max(0.0, float(self.video_pan_y)), float(max_pan_y))
+
+        view_x = int(round(self.video_pan_x))
+        view_y = int(round(self.video_pan_y))
+        view_w = min(viewport_w, scaled_w)
+        view_h = min(viewport_h, scaled_h)
+
+        visible_pixmap = zoomed_pixmap.copy(view_x, view_y, view_w, view_h)
+
+        canvas = QPixmap(viewport_w, viewport_h)
+        canvas.fill(Qt.black)
+        offset_x = (viewport_w - view_w) // 2
+        offset_y = (viewport_h - view_h) // 2
+
+        painter = QPainter(canvas)
+        painter.drawPixmap(offset_x, offset_y, visible_pixmap)
+        painter.end()
+
         # Store scale information for accurate click detection
-        self.current_display_scale = min(
-            self.video_label.width() / w,
-            self.video_label.height() / h
-        )
-        self.current_display_width = int(w * self.current_display_scale)
-        self.current_display_height = int(h * self.current_display_scale)
-        self.current_display_offset_x = (self.video_label.width() - self.current_display_width) // 2
-        self.current_display_offset_y = (self.video_label.height() - self.current_display_height) // 2
+        self.current_display_scale = effective_scale
+        self.current_scaled_width = scaled_w
+        self.current_scaled_height = scaled_h
+        self.current_pan_x = view_x
+        self.current_pan_y = view_y
+        self.current_display_width = view_w
+        self.current_display_height = view_h
+        self.current_display_offset_x = offset_x
+        self.current_display_offset_y = offset_y
         
-        self.video_label.setPixmap(scaled_pixmap)
+        self.video_label.setPixmap(canvas)
     
     def draw_direction_rois(self, frame):
         """Draw direction ROIs with transparency"""

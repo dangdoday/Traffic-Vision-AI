@@ -26,7 +26,7 @@ except Exception as e:
     print(f"❌ YOLO import failed: {e}")
     YOLO_AVAILABLE = False
 
-from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QListWidget, QFileDialog, QInputDialog, QMessageBox, QComboBox, QSpinBox, QDoubleSpinBox, QMenu, QAction, QMenuBar, QDialog
+from PyQt5.QtWidgets import QApplication, QWidget, QMainWindow, QVBoxLayout, QHBoxLayout, QPushButton, QLabel, QListWidget, QFileDialog, QInputDialog, QMessageBox, QComboBox, QSpinBox, QDoubleSpinBox, QMenu, QAction, QMenuBar, QDialog, QSlider
 from PyQt5.QtCore import QThread, pyqtSignal, QTimer, Qt
 from PyQt5.QtGui import QImage, QPixmap, QCursor
 from ui.lane_selector import VehicleTypeDialog
@@ -231,6 +231,18 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         self.current_display_height = 768
         self.current_display_offset_x = 0
         self.current_display_offset_y = 0
+
+        # Playback UI state
+        self.video_zoom_factor = 1.0
+        self.video_zoom_step = 0.25
+        self.video_min_zoom = 1.0
+        self.video_max_zoom = 4.0
+        self.video_pan_x = 0.0
+        self.video_pan_y = 0.0
+        self.is_panning_video = False
+        self._last_pan_mouse_pos = None
+        self._timeline_user_dragging = False
+        self._playback_duration_sec = 0.0
         
         # Main layout
         main_layout = QHBoxLayout()
@@ -250,6 +262,50 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         self.video_label.customContextMenuRequested.connect(self.show_context_menu)
         
         main_layout.addWidget(self.video_label)
+
+        # Playback controls (always visible under the video)
+        playback_layout = QHBoxLayout()
+        playback_layout.addWidget(QLabel("Playback:"))
+
+        self.btn_seek_back_5s = QPushButton("-5s")
+        self.btn_seek_back_5s.clicked.connect(self.seek_backward_5s)
+        playback_layout.addWidget(self.btn_seek_back_5s)
+
+        self.btn_pause_playback = QPushButton("Pause")
+        self.btn_pause_playback.clicked.connect(self.toggle_play_pause)
+        playback_layout.addWidget(self.btn_pause_playback)
+
+        self.btn_seek_forward_5s = QPushButton("+5s")
+        self.btn_seek_forward_5s.clicked.connect(self.seek_forward_5s)
+        playback_layout.addWidget(self.btn_seek_forward_5s)
+
+        self.timeline_slider = QSlider(Qt.Horizontal)
+        self.timeline_slider.setMinimum(0)
+        self.timeline_slider.setMaximum(1000)
+        self.timeline_slider.setValue(0)
+        self.timeline_slider.sliderPressed.connect(self._on_timeline_slider_pressed)
+        self.timeline_slider.sliderReleased.connect(self._on_timeline_slider_released)
+        playback_layout.addWidget(self.timeline_slider, 1)
+
+        self.time_label = QLabel("00:00 / 00:00")
+        self.time_label.setMinimumWidth(120)
+        playback_layout.addWidget(self.time_label)
+
+        self.btn_zoom_out = QPushButton("Zoom -")
+        self.btn_zoom_out.clicked.connect(self.zoom_out_video)
+        playback_layout.addWidget(self.btn_zoom_out)
+
+        self.btn_zoom_reset = QPushButton("1x")
+        self.btn_zoom_reset.clicked.connect(self.reset_video_zoom)
+        playback_layout.addWidget(self.btn_zoom_reset)
+
+        self.btn_zoom_in = QPushButton("Zoom +")
+        self.btn_zoom_in.clicked.connect(self.zoom_in_video)
+        playback_layout.addWidget(self.btn_zoom_in)
+
+        self.zoom_label = QLabel("1.00x")
+        self.zoom_label.setMinimumWidth(52)
+        playback_layout.addWidget(self.zoom_label)
         
         # Right side - Control panel
         control_layout = QVBoxLayout()
@@ -475,9 +531,13 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         # Add status bar instead
         self.statusBar().showMessage("Ready - Direction-based detection")
         
-        # Create central widget and set layout (video only)
+        # Create central widget and set layout (video + playback controls)
+        root_layout = QVBoxLayout()
+        root_layout.addLayout(main_layout)
+        root_layout.addLayout(playback_layout)
+
         central_widget = QWidget()
-        central_widget.setLayout(main_layout)
+        central_widget.setLayout(root_layout)
         self.setCentralWidget(central_widget)
         
         # Store control_layout reference for future use if needed
@@ -488,6 +548,7 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         self.thread = VideoThread(self.video_path)
         self.thread.change_pixmap_signal.connect(self.update_image)
         self.thread.error_signal.connect(self.show_error)
+        self.thread.playback_info_signal.connect(self.update_playback_info)
         
         # Pass globals reference to thread
         # Use lambda for _show_all_boxes to get real-time value
@@ -547,6 +608,7 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
             print("ℹ️ No saved configuration found for initial video - Draw ROIs manually")
         
         self.update_lists()
+        self.reset_playback_ui_for_new_video()
     
     # NOTE: update_image moved to DisplayHandlerMixin
     # NOTE: draw_direction_rois moved to DisplayHandlerMixin
@@ -827,6 +889,41 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         action_device_info.setEnabled(False)
         device_menu.addAction(action_device_info)
 
+        # === PLAYBACK Menu ===
+        playback_menu = menubar.addMenu("▶️ &Playback")
+
+        self.action_toggle_playback = QAction("Pause", self)
+        self.action_toggle_playback.setShortcut("K")
+        self.action_toggle_playback.triggered.connect(self.toggle_play_pause)
+        playback_menu.addAction(self.action_toggle_playback)
+
+        self.action_seek_back_5s = QAction("Seek -5s", self)
+        self.action_seek_back_5s.setShortcut("Ctrl+Left")
+        self.action_seek_back_5s.triggered.connect(self.seek_backward_5s)
+        playback_menu.addAction(self.action_seek_back_5s)
+
+        self.action_seek_forward_5s = QAction("Seek +5s", self)
+        self.action_seek_forward_5s.setShortcut("Ctrl+Right")
+        self.action_seek_forward_5s.triggered.connect(self.seek_forward_5s)
+        playback_menu.addAction(self.action_seek_forward_5s)
+
+        playback_menu.addSeparator()
+
+        self.action_zoom_in = QAction("Zoom In", self)
+        self.action_zoom_in.setShortcut("Ctrl++")
+        self.action_zoom_in.triggered.connect(self.zoom_in_video)
+        playback_menu.addAction(self.action_zoom_in)
+
+        self.action_zoom_out = QAction("Zoom Out", self)
+        self.action_zoom_out.setShortcut("Ctrl+-")
+        self.action_zoom_out.triggered.connect(self.zoom_out_video)
+        playback_menu.addAction(self.action_zoom_out)
+
+        self.action_zoom_reset = QAction("Reset Zoom", self)
+        self.action_zoom_reset.setShortcut("Ctrl+0")
+        self.action_zoom_reset.triggered.connect(self.reset_video_zoom)
+        playback_menu.addAction(self.action_zoom_reset)
+
         
         # === DETECTION Menu ===
         detection_menu = menubar.addMenu("🚀 &Detection")
@@ -953,6 +1050,159 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
                 self.finish_edit_roi()
             else:
                 print("⚠️ Not editing anything")
+
+    @staticmethod
+    def _format_time_seconds(total_seconds):
+        """Format seconds as HH:MM:SS or MM:SS."""
+        sec = max(0, int(round(float(total_seconds))))
+        hours = sec // 3600
+        minutes = (sec % 3600) // 60
+        seconds = sec % 60
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        return f"{minutes:02d}:{seconds:02d}"
+
+    def reset_playback_ui_for_new_video(self):
+        """Reset playback widgets when opening a new video."""
+        self._timeline_user_dragging = False
+        self._playback_duration_sec = 0.0
+        self.current_frame = None
+        self.video_pan_x = 0.0
+        self.video_pan_y = 0.0
+        self.is_panning_video = False
+        self._last_pan_mouse_pos = None
+
+        if hasattr(self, 'video_label'):
+            self.video_label.setCursor(Qt.ArrowCursor)
+
+        if hasattr(self, 'timeline_slider'):
+            self.timeline_slider.blockSignals(True)
+            self.timeline_slider.setValue(0)
+            self.timeline_slider.blockSignals(False)
+
+        if hasattr(self, 'time_label'):
+            self.time_label.setText("00:00 / 00:00")
+
+        self.set_playback_paused(False, propagate=False, update_status=False)
+        self.reset_video_zoom(silent=True)
+
+    def set_playback_paused(self, paused, propagate=True, update_status=True):
+        """Apply pause state to thread and sync playback button/action labels."""
+        is_paused = bool(paused)
+
+        if propagate and hasattr(self, 'thread') and self.thread is not None:
+            self.thread.set_paused(is_paused)
+
+        if hasattr(self, 'btn_pause_playback'):
+            self.btn_pause_playback.setText("Resume" if is_paused else "Pause")
+
+        if hasattr(self, 'action_toggle_playback'):
+            self.action_toggle_playback.setText("Resume" if is_paused else "Pause")
+
+        if update_status:
+            state_text = "Paused" if is_paused else "Playing"
+            self.statusBar().showMessage(f"Playback: {state_text}", 2000)
+
+    def toggle_play_pause(self):
+        """Toggle play/pause state."""
+        if not hasattr(self, 'thread') or self.thread is None:
+            return
+
+        paused = self.thread.toggle_paused()
+        self.set_playback_paused(paused, propagate=False)
+
+    def seek_relative_seconds(self, delta_seconds):
+        """Seek video timeline by relative seconds."""
+        if not hasattr(self, 'thread') or self.thread is None:
+            return
+        self.thread.request_seek_relative(float(delta_seconds))
+
+    def seek_backward_5s(self):
+        """Seek backward 5 seconds."""
+        self.seek_relative_seconds(-5.0)
+
+    def seek_forward_5s(self):
+        """Seek forward 5 seconds."""
+        self.seek_relative_seconds(5.0)
+
+    def _on_timeline_slider_pressed(self):
+        """Mark that user is dragging the timeline slider."""
+        self._timeline_user_dragging = True
+
+    def _on_timeline_slider_released(self):
+        """Seek to slider-selected timeline position."""
+        self._timeline_user_dragging = False
+        if not hasattr(self, 'thread') or self.thread is None:
+            return
+
+        duration = float(getattr(self, '_playback_duration_sec', 0.0) or 0.0)
+        slider_max = max(1, self.timeline_slider.maximum())
+        ratio = float(self.timeline_slider.value()) / float(slider_max)
+        target_sec = duration * ratio if duration > 0 else 0.0
+        self.thread.request_seek_to_seconds(target_sec)
+
+    def update_playback_info(self, info):
+        """Update timeline/time labels from VideoThread playback signal."""
+        current_sec = float(info.get('current_sec', 0.0) or 0.0)
+        duration_sec = float(info.get('duration_sec', 0.0) or 0.0)
+        paused = bool(info.get('paused', False))
+
+        self._playback_duration_sec = max(0.0, duration_sec)
+        self.set_playback_paused(paused, propagate=False, update_status=False)
+
+        if hasattr(self, 'timeline_slider') and not self._timeline_user_dragging:
+            if self._playback_duration_sec > 0:
+                ratio = max(0.0, min(1.0, current_sec / self._playback_duration_sec))
+                slider_value = int(round(ratio * self.timeline_slider.maximum()))
+            else:
+                slider_value = 0
+
+            self.timeline_slider.blockSignals(True)
+            self.timeline_slider.setValue(slider_value)
+            self.timeline_slider.blockSignals(False)
+
+        if hasattr(self, 'time_label'):
+            self.time_label.setText(
+                f"{self._format_time_seconds(current_sec)} / {self._format_time_seconds(self._playback_duration_sec)}"
+            )
+
+    def _set_video_zoom(self, zoom_factor, silent=False):
+        """Set zoom factor and refresh current frame display."""
+        clamped = max(self.video_min_zoom, min(self.video_max_zoom, float(zoom_factor)))
+        self.video_zoom_factor = clamped
+
+        if clamped <= 1.0:
+            self.video_pan_x = 0.0
+            self.video_pan_y = 0.0
+            self.is_panning_video = False
+            self._last_pan_mouse_pos = None
+
+        if hasattr(self, 'zoom_label'):
+            self.zoom_label.setText(f"{clamped:.2f}x")
+
+        if hasattr(self, 'video_label'):
+            if clamped > 1.0 and not self.is_panning_video:
+                self.video_label.setCursor(Qt.OpenHandCursor)
+            elif clamped <= 1.0:
+                self.video_label.setCursor(Qt.ArrowCursor)
+
+        if hasattr(self, 'current_frame') and self.current_frame is not None:
+            self.update_image(self.current_frame)
+
+        if not silent:
+            self.statusBar().showMessage(f"Zoom: {clamped:.2f}x", 1500)
+
+    def zoom_in_video(self):
+        """Increase video zoom."""
+        self._set_video_zoom(self.video_zoom_factor + self.video_zoom_step)
+
+    def zoom_out_video(self):
+        """Decrease video zoom."""
+        self._set_video_zoom(self.video_zoom_factor - self.video_zoom_step)
+
+    def reset_video_zoom(self, silent=False):
+        """Reset video zoom to 1x."""
+        self._set_video_zoom(1.0, silent=silent)
     
     def closeEvent(self, event):
         self.thread.stop()

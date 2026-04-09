@@ -168,6 +168,23 @@ class EventHandlerMixin:
         # Use stored scale information for accurate click detection
         if not hasattr(self, 'current_display_scale'):
             return
+
+        is_editing_lane = hasattr(self, 'editing_lane_idx') and self.editing_lane_idx is not None
+        is_roi_editing = self.roi_editor.is_editing()
+        is_drawing = main._drawing_mode is not None
+
+        # Pan with left mouse drag when zoomed and not in any drawing/editing mode.
+        if (
+            event.button() == Qt.LeftButton
+            and float(getattr(self, 'video_zoom_factor', 1.0)) > 1.0
+            and not is_editing_lane
+            and not is_roi_editing
+            and not is_drawing
+        ):
+            self.is_panning_video = True
+            self._last_pan_mouse_pos = event.pos()
+            self.video_label.setCursor(Qt.ClosedHandCursor)
+            return
         
         # Get click position relative to label
         click_x = event.pos().x() - self.current_display_offset_x
@@ -175,8 +192,10 @@ class EventHandlerMixin:
         
         # Convert to frame coordinates using stored scale
         if 0 <= click_x < self.current_display_width and 0 <= click_y < self.current_display_height:
-            frame_x = int(click_x / self.current_display_scale)
-            frame_y = int(click_y / self.current_display_scale)
+            scaled_x = click_x + int(getattr(self, 'current_pan_x', 0))
+            scaled_y = click_y + int(getattr(self, 'current_pan_y', 0))
+            frame_x = int(scaled_x / self.current_display_scale)
+            frame_y = int(scaled_y / self.current_display_scale)
             
             # Handle lane editing mode
             if hasattr(self, 'editing_lane_idx') and self.editing_lane_idx is not None:
@@ -309,25 +328,28 @@ class EventHandlerMixin:
         
         if self.current_frame is None:
             return
-        
-        # Get mouse position in frame coordinates
-        label_width = self.video_label.width()
-        label_height = self.video_label.height()
-        frame_height, frame_width = self.current_frame.shape[:2]
-        
-        scale = min(label_width / frame_width, label_height / frame_height)
-        display_width = int(frame_width * scale)
-        display_height = int(frame_height * scale)
-        
-        offset_x = (label_width - display_width) // 2
-        offset_y = (label_height - display_height) // 2
-        
-        mouse_x = event.pos().x() - offset_x
-        mouse_y = event.pos().y() - offset_y
-        
-        if 0 <= mouse_x < display_width and 0 <= mouse_y < display_height:
-            frame_x = int(mouse_x / scale)
-            frame_y = int(mouse_y / scale)
+
+        # Drag-to-pan when zoomed in.
+        if getattr(self, 'is_panning_video', False) and getattr(self, '_last_pan_mouse_pos', None) is not None:
+            dx = event.pos().x() - self._last_pan_mouse_pos.x()
+            dy = event.pos().y() - self._last_pan_mouse_pos.y()
+            self.video_pan_x = float(getattr(self, 'video_pan_x', 0.0)) - float(dx)
+            self.video_pan_y = float(getattr(self, 'video_pan_y', 0.0)) - float(dy)
+            self._last_pan_mouse_pos = event.pos()
+            self.update_image(self.current_frame)
+            return
+
+        if not hasattr(self, 'current_display_scale'):
+            return
+
+        mouse_x = event.pos().x() - self.current_display_offset_x
+        mouse_y = event.pos().y() - self.current_display_offset_y
+
+        if 0 <= mouse_x < self.current_display_width and 0 <= mouse_y < self.current_display_height:
+            scaled_x = mouse_x + int(getattr(self, 'current_pan_x', 0))
+            scaled_y = mouse_y + int(getattr(self, 'current_pan_y', 0))
+            frame_x = int(scaled_x / self.current_display_scale)
+            frame_y = int(scaled_y / self.current_display_scale)
             
             # Handle lane editing drag
             if hasattr(self, 'editing_lane_idx') and self.editing_lane_idx is not None:
@@ -353,6 +375,17 @@ class EventHandlerMixin:
     
     def video_mouse_release(self, event):
         """Stop dragging point"""
+        from PyQt5.QtCore import Qt
+
+        if getattr(self, 'is_panning_video', False):
+            self.is_panning_video = False
+            self._last_pan_mouse_pos = None
+            if float(getattr(self, 'video_zoom_factor', 1.0)) > 1.0:
+                self.video_label.setCursor(Qt.OpenHandCursor)
+            else:
+                self.video_label.setCursor(Qt.ArrowCursor)
+            return
+
         # Stop lane point dragging
         if hasattr(self, 'dragging_lane_point_idx'):
             if self.dragging_lane_point_idx is not None:
@@ -372,25 +405,18 @@ class EventHandlerMixin:
         
         if self.current_frame is None:
             return
-        
-        # Get click position in frame coordinates
-        label_width = self.video_label.width()
-        label_height = self.video_label.height()
-        frame_height, frame_width = self.current_frame.shape[:2]
-        
-        scale = min(label_width / frame_width, label_height / frame_height)
-        display_width = int(frame_width * scale)
-        display_height = int(frame_height * scale)
-        
-        offset_x = (label_width - display_width) // 2
-        offset_y = (label_height - display_height) // 2
-        
-        click_x = event.pos().x() - offset_x
-        click_y = event.pos().y() - offset_y
-        
-        if 0 <= click_x < display_width and 0 <= click_y < display_height:
-            frame_x = int(click_x / scale)
-            frame_y = int(click_y / scale)
+
+        if not hasattr(self, 'current_display_scale'):
+            return
+
+        click_x = event.pos().x() - self.current_display_offset_x
+        click_y = event.pos().y() - self.current_display_offset_y
+
+        if 0 <= click_x < self.current_display_width and 0 <= click_y < self.current_display_height:
+            scaled_x = click_x + int(getattr(self, 'current_pan_x', 0))
+            scaled_y = click_y + int(getattr(self, 'current_pan_y', 0))
+            frame_x = int(scaled_x / self.current_display_scale)
+            frame_y = int(scaled_y / self.current_display_scale)
             
             # Handle lane editing - double click to add point
             if hasattr(self, 'editing_lane_idx') and self.editing_lane_idx is not None:
