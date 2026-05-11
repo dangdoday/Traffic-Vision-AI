@@ -154,9 +154,13 @@ def _build_plate_candidates(cleaned_text):
     """Build candidate canonical plates from noisy OCR text.
 
     Canonical forms (without separators):
-      - XX + L + N5      (e.g. 30G07784)
-      - XX + L + N6      (e.g. 61D206617, equivalent to 61D2-066.17 display)
-      - XX + LL + N5
+      Cars (ô tô, 1 letter only):
+      - XX + L + N4      (e.g. 30A1234)
+      - XX + L + N5      (e.g. 30A12345)
+      - XX + L + N6      (e.g. 61D206617, two-line display: 61D2-066.17)
+      Motorcycles (xe máy):
+      - XX + L + N + N4  (e.g. 30A11234, 1 letter + 1 digit + 4 digits)
+      - XX + LL + N4     (e.g. 30AB1234, 2 letters + 4 digits)
     """
     candidates = []
     if len(cleaned_text) < 8:
@@ -178,6 +182,56 @@ def _build_plate_candidates(cleaned_text):
             total_cost += digit_cost
 
         return ''.join(digits), total_cost
+
+    def add_motorcycle_candidates(segment):
+        """Add candidates for motorcycle format: XX + L + N + N4 (e.g., 30A11234)."""
+        if len(segment) < 8:
+            return
+        
+        # Parse province (XX)
+        p0_options = _digit_candidates(segment[0], allow_17_swap=True)
+        p1_options = _digit_candidates(segment[1], allow_17_swap=True)
+        if not p0_options or not p1_options:
+            return
+        
+        # Parse series letter (L)
+        series_options = _series_letter_candidates(segment[2])
+        if not series_options:
+            return
+        
+        # Parse mid digit (N)
+        mid_options = _digit_candidates(segment[3], allow_17_swap=False)
+        if not mid_options:
+            return
+        
+        # Parse tail digits (NNNN)
+        tail_options = []
+        tail_cost = 0
+        for ch in segment[4:8]:
+            digit_opts = _digit_candidates(ch, allow_17_swap=False)
+            if not digit_opts:
+                return
+            digit, cost = digit_opts[0]
+            tail_options.append(digit)
+            tail_cost += cost
+        
+        if len(tail_options) < 4:
+            return
+        
+        # Generate all combinations
+        for p0, p0_cost in p0_options[:2]:
+            for p1, p1_cost in p1_options[:2]:
+                province = f"{p0}{p1}"
+                province_valid = province in VALID_PROVINCE_CODES
+                province_cost = p0_cost + p1_cost
+                province_penalty = 0 if province_valid else 3
+                
+                for series, series_cost in series_options[:2]:
+                    for mid_digit, mid_cost in mid_options[:2]:
+                        tail_digits = ''.join(tail_options[:4])
+                        canonical = f"{province}{series}{mid_digit}{tail_digits}"
+                        score = province_cost + series_cost + mid_cost + tail_cost + province_penalty + 0.5
+                        candidates.append((score, canonical, province_valid))
 
     def add_candidates_from_segment(segment, start_penalty=0):
         if len(segment) < 8:
@@ -223,8 +277,8 @@ def _build_plate_candidates(cleaned_text):
                     continue
 
                 tail_src = segment[2 + series_len:]
-                # XX + LL + N5 is allowed; XX + L + N5/N6 is the common family.
-                tail_lengths = (5,) if series_len == 2 else (6, 5)
+                # Cars (1 letter): XX + L + N4/N5/N6; Motorcycles (2 letters): XX + LL + N4
+                tail_lengths = (4,) if series_len == 2 else (6, 5, 4)
                 pattern_penalty = 1 if series_len == 2 else 0
 
                 for tail_len in tail_lengths:
@@ -245,12 +299,14 @@ def _build_plate_candidates(cleaned_text):
 
     # Primary parse: assume useful characters start near the beginning.
     add_candidates_from_segment(cleaned_text)
+    add_motorcycle_candidates(cleaned_text)
 
     # For long/noisy strings (often merged 2-line OCR), also scan short windows.
     if len(cleaned_text) > 10:
         max_start = min(4, len(cleaned_text) - 8)
         for start in range(1, max_start + 1):
             add_candidates_from_segment(cleaned_text[start:start + 12], start_penalty=start)
+            add_motorcycle_candidates(cleaned_text[start:start + 8])
 
     return candidates
 
@@ -315,7 +371,8 @@ def _recover_two_line_merged(cleaned_text):
                     digit, digit_cost = digit_options[0]
                     digit_stream.append((digit, digit_cost))
 
-                for tail_len in (5, 6):
+                tail_lengths = (4,) if series_len == 2 else (6, 5, 4)
+                for tail_len in tail_lengths:
                     if len(digit_stream) < tail_len:
                         continue
                     # Prefer first N digits, but also allow last N digits for merged/noisy tails.
@@ -386,19 +443,31 @@ def validate_license_plate(plate_text, vehicle_class):
 
     Accepts data with/without separators, normalizes internally, then validates:
       - province: 2 digits and in known province list
-            - series/tail in allowed canonical families:
-                1) XX + L  + N5
-                2) XX + L  + N6 (two-line display style: Ld + N5)
-                3) XX + LL + N5
+      - Supported canonical families for cars (ô tô):
+            1) XX + L + N4  (e.g., 30A1234)
+            2) XX + L + N5  (e.g., 30A12345)
+            3) XX + L + N6  (e.g., 61D206617, two-line display: 61D2-066.17)
+      - Supported canonical families for motorcycles (xe máy):
+            4) XX + L + N + N4  (e.g., 30A11234, 1 letter + 1 digit + 4 digits)
+            5) XX + LL + N4     (e.g., 30AB1234, 2 letters + 4 digits)
     """
     if not plate_text:
         return (False, "")
 
     canonical = _sanitize_ocr_text(plate_text)
+    
+    # Car plates (1 letter only)
+    m_one_letter_4 = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d{4})$', canonical)
     m_one_letter_5 = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d{5})$', canonical)
     m_one_letter_6 = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d{6})$', canonical)
-    m_two_letters_5 = re.match(r'^(\d{2})([A-HJ-NPR-Z]{2})(\d{5})$', canonical)
-    m = m_one_letter_5 or m_one_letter_6 or m_two_letters_5
+    
+    # Motorcycle plates
+    m_motorcycle_1L1D = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d)(\d{4})$', canonical)
+    m_motorcycle_2L = re.match(r'^(\d{2})([A-HJ-NPR-Z]{2})(\d{4})$', canonical)
+    
+    m = (m_one_letter_4 or m_one_letter_5 or m_one_letter_6 or 
+         m_motorcycle_1L1D or m_motorcycle_2L)
+    
     if m is None:
         return (False, canonical)
 
@@ -413,15 +482,21 @@ def format_vietnamese_plate(plate_text):
     """Format cleaned plate text into a common Vietnamese display style.
 
     Input should already be uppercase and cleaned (A-Z0-9 only).
-    Examples:
-      29B12345  -> 29B-123.45
-            61D206617 -> 61D2-066.17
-      29H123456 -> 29H1-234.56
+    Examples (cars):
+      29B12345   -> 29B-123.45
+      61D206617  -> 61D2-066.17
+      29H123456  -> 29H1-234.56
+      29B1234    -> 29B-1.234 (4-digit car)
+      29AB1234   -> 29AB-1.234 (2-letter 4-digit car)
+    Examples (motorcycles):
+      30A11234   -> 30A1-1.234 (1 letter 1 digit)
+      30AB1234   -> 30AB-1.234 (2 letters)
     """
     if not plate_text:
         return ""
 
     cleaned = _sanitize_ocr_text(plate_text)
+    
     # 1-letter + 6-digit canonical is shown as letter-digit / 5 digits.
     # Example: 61D206617 -> 61D2-066.17
     m_one_letter_6 = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d{6})$', cleaned)
@@ -433,14 +508,30 @@ def format_vietnamese_plate(plate_text):
         bottom = tail6[1:]
         return f"{province}{series}-{bottom[:3]}.{bottom[3:]}"
 
-    m_standard = re.match(r'^(\d{2})([A-HJ-NPR-Z]{1,2})(\d{5})$', cleaned)
+    # Motorcycle: 1 letter + 1 digit + 4 digits (e.g., 30A11234 -> 30A1-1.234)
+    m_motorcycle_1L1D = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d)(\d{4})$', cleaned)
+    if m_motorcycle_1L1D:
+        province = m_motorcycle_1L1D.group(1)
+        letter = m_motorcycle_1L1D.group(2)
+        mid_digit = m_motorcycle_1L1D.group(3)
+        tail4 = m_motorcycle_1L1D.group(4)
+        return f"{province}{letter}{mid_digit}-{tail4[0]}.{tail4[1:]}"
+
+    # Car or motorcycle: 1 letter + 4-5 digits, or 2 letters + 4-5 digits
+    m_standard = re.match(r'^(\d{2})([A-HJ-NPR-Z]{1,2})(\d{4,5})$', cleaned)
     if m_standard is None:
         return cleaned
 
     province = m_standard.group(1)
     series = m_standard.group(2)
     tail = m_standard.group(3)
-    return f"{province}{series}-{tail[:3]}.{tail[3:]}"
+    
+    # For 4-digit tail: format as XX...-X.XXX
+    if len(tail) == 4:
+        return f"{province}{series}-{tail[0]}.{tail[1:]}"
+    # For 5-digit tail: format as XX...-XXX.XX
+    else:
+        return f"{province}{series}-{tail[:3]}.{tail[3:]}"
 
 
 class VideoThread(QThread):
