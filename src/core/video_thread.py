@@ -478,60 +478,68 @@ def validate_license_plate(plate_text, vehicle_class):
     return (True, canonical)
 
 
-def format_vietnamese_plate(plate_text):
+def format_vietnamese_plate(plate_text, vehicle_class=0):
     """Format cleaned plate text into a common Vietnamese display style.
 
-    Input should already be uppercase and cleaned (A-Z0-9 only).
-    Examples (cars):
-      29B12345   -> 29B-123.45
-      61D206617  -> 61D2-066.17
-      29H123456  -> 29H1-234.56
-      29B1234    -> 29B-1.234 (4-digit car)
-      29AB1234   -> 29AB-1.234 (2-letter 4-digit car)
-    Examples (motorcycles):
-      30A11234   -> 30A1-1.234 (1 letter 1 digit)
-      30AB1234   -> 30AB-1.234 (2 letters)
+    Args:
+        plate_text: Canonical plate (A-Z0-9 only)
+        vehicle_class: YOLO class ID (0=car, 3=motorcycle, others=car)
+                      Used to disambiguate 8-char formats that could be either.
+
+    Vietnamese plate display formats:
+    - 6-digit cars (2-line): XX L F1 / F2...F5 (e.g., 61D206617 -> 61D2 / 06617)
+    - 5-digit cars (1-line): XX L - XXX.XX (e.g., 29A12345 -> 29A - 123.45)
+    - 4-digit cars (1-line): XX L - XX.XX (e.g., 29B1234 -> 29B - 12.34)
+    - Motorcycle 2-letter: XX LL - X.XXX (e.g., 30AB1234 -> 30AB - 1.234)
+    - Motorcycle 1L+1D: XX L - D.XXXX (e.g., 30A11234 -> 30A - 1.1234)
     """
     if not plate_text:
         return ""
 
     cleaned = _sanitize_ocr_text(plate_text)
+    is_motorcycle = vehicle_class == 3  # YOLO class 3 = motorcycle
     
-    # 1-letter + 6-digit canonical is shown as letter-digit / 5 digits.
-    # Example: 61D206617 -> 61D2-066.17
+    # 6-digit cars (2-line): displayed as XX L F1 / F2...F5
+    # Example: 61D206617 -> 61D2 / 06617
     m_one_letter_6 = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d{6})$', cleaned)
     if m_one_letter_6:
         province = m_one_letter_6.group(1)
         letter = m_one_letter_6.group(2)
         tail6 = m_one_letter_6.group(3)
-        series = f"{letter}{tail6[0]}"
-        bottom = tail6[1:]
-        return f"{province}{series}-{bottom[:3]}.{bottom[3:]}"
+        line1 = f"{province}{letter}{tail6[0]}"
+        line2 = tail6[1:]
+        return f"{line1} / {line2}"
 
-    # Motorcycle: 1 letter + 1 digit + 4 digits (e.g., 30A11234 -> 30A1-1.234)
-    m_motorcycle_1L1D = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d)(\d{4})$', cleaned)
-    if m_motorcycle_1L1D:
-        province = m_motorcycle_1L1D.group(1)
-        letter = m_motorcycle_1L1D.group(2)
-        mid_digit = m_motorcycle_1L1D.group(3)
-        tail4 = m_motorcycle_1L1D.group(4)
-        return f"{province}{letter}{mid_digit}-{tail4[0]}.{tail4[1:]}"
-
-    # Car or motorcycle: 1 letter + 4-5 digits, or 2 letters + 4-5 digits
+    # Standard: 1 letter or 2 letters + 4-5 digits
     m_standard = re.match(r'^(\d{2})([A-HJ-NPR-Z]{1,2})(\d{4,5})$', cleaned)
-    if m_standard is None:
-        return cleaned
-
-    province = m_standard.group(1)
-    series = m_standard.group(2)
-    tail = m_standard.group(3)
+    if m_standard:
+        province = m_standard.group(1)
+        series = m_standard.group(2)
+        tail = m_standard.group(3)
+        
+        # Check for motorcycle 1L+1D pattern: tail must be 5 digits, series 1 letter
+        if len(tail) == 5 and len(series) == 1 and is_motorcycle:
+            # Try to interpret as motorcycle: XX + L + D + NNNN
+            # This means: first digit of tail is the mid_digit, rest is tail
+            mid_digit = tail[0]
+            tail4 = tail[1:]
+            return f"{province}{series} - {mid_digit}.{tail4}"
+        
+        # 5-digit: format as XX... - XXX.XX
+        if len(tail) == 5:
+            return f"{province}{series} - {tail[:3]}.{tail[3:]}"
+        # 4-digit:
+        # - Cars (1 letter): format as XX L - XX.XX
+        # - Motorcycles (2 letters): format as XX LL - X.XXX
+        else:
+            if len(series) == 1:
+                # Car: split as XX.XX
+                return f"{province}{series} - {tail[:2]}.{tail[2:]}"
+            else:
+                # Motorcycle: split as X.XXX
+                return f"{province}{series} - {tail[0]}.{tail[1:]}"
     
-    # For 4-digit tail: format as XX...-X.XXX
-    if len(tail) == 4:
-        return f"{province}{series}-{tail[0]}.{tail[1:]}"
-    # For 5-digit tail: format as XX...-XXX.XX
-    else:
-        return f"{province}{series}-{tail[:3]}.{tail[3:]}"
+    return cleaned
 
 
 class VideoThread(QThread):
@@ -2149,7 +2157,7 @@ class VideoThread(QThread):
                                     if is_valid:
                                         stable_plate = self._update_stable_plate(veh_track_id, cleaned_plate)
                                         if stable_plate:
-                                            formatted_plate = format_vietnamese_plate(stable_plate)
+                                            formatted_plate = format_vietnamese_plate(stable_plate, veh_cls_id)
                                             self.vehicle_ocr_texts[veh_track_id] = formatted_plate
                                             if self.enable_perf_logs:
                                                 if corrected_text != ocr_text:
@@ -2158,10 +2166,8 @@ class VideoThread(QThread):
                                                     print(f"✅ OCR [VALID] Vehicle ID:{veh_track_id} → '{formatted_plate}'")
                                         elif self.enable_ocr_debug_logs:
                                             print(f"⏳ OCR [WAIT STABLE] Vehicle ID:{veh_track_id} → '{cleaned_plate}'")
-                                    elif self._is_loose_ocr_candidate(cleaned_plate):
-                                        stable_plate = self._update_stable_plate(veh_track_id, cleaned_plate)
                                         if stable_plate:
-                                            formatted_plate = format_vietnamese_plate(stable_plate)
+                                            formatted_plate = format_vietnamese_plate(stable_plate, veh_cls_id)
                                             self.vehicle_ocr_texts[veh_track_id] = formatted_plate
                                             if self.enable_ocr_debug_logs:
                                                 print(f"🟡 OCR [LOOSE ACCEPT] Vehicle ID:{veh_track_id} → '{formatted_plate}'")
@@ -2221,7 +2227,7 @@ class VideoThread(QThread):
                                     if is_valid:
                                         stable_plate = self._update_stable_plate(veh_track_id, cleaned_plate)
                                         if stable_plate:
-                                            ocr_text = format_vietnamese_plate(stable_plate)
+                                            ocr_text = format_vietnamese_plate(stable_plate, veh_cls_id)
                                             if self.enable_perf_logs:
                                                 if corrected_text != raw_ocr_text:
                                                     print(f"✅ OCR [Relative CORRECTED] Vehicle ID:{veh_track_id} → '{raw_ocr_text}' → '{ocr_text}'")
@@ -2232,7 +2238,7 @@ class VideoThread(QThread):
                                     elif self._is_loose_ocr_candidate(cleaned_plate):
                                         stable_plate = self._update_stable_plate(veh_track_id, cleaned_plate)
                                         if stable_plate:
-                                            ocr_text = format_vietnamese_plate(stable_plate)
+                                            ocr_text = format_vietnamese_plate(stable_plate, veh_cls_id)
                                             if self.enable_ocr_debug_logs:
                                                 print(f"🟡 OCR [Relative LOOSE ACCEPT] Vehicle ID:{veh_track_id} → '{ocr_text}'")
                                     elif self.enable_ocr_debug_logs:
