@@ -707,10 +707,22 @@ class VideoThread(QThread):
                 # use_textline_orientation=True: detect rotated text
                 # lang='en': English (use 'ch' for Chinese, 'latin' for Latin scripts)
                 try:
+                    # Try with use_gpu parameter (older versions)
                     self.ocr = PaddleOCR(use_textline_orientation=True, lang='en', use_gpu=self.cuda_available)
+                except TypeError:
+                    # Newer PaddleOCR versions use use_gpu differently or not at all
+                    # Try without use_gpu - it auto-detects GPU availability
+                    try:
+                        self.ocr = PaddleOCR(use_textline_orientation=True, lang='en')
+                    except Exception:
+                        # Last resort: minimal config
+                        self.ocr = PaddleOCR(lang='en')
                 except Exception:
-                    # Fallback to CPU when paddle GPU runtime is unavailable/misconfigured.
-                    self.ocr = PaddleOCR(use_textline_orientation=True, lang='en', use_gpu=False)
+                    # Fallback to CPU explicit config
+                    try:
+                        self.ocr = PaddleOCR(use_textline_orientation=True, lang='en', use_gpu=False)
+                    except TypeError:
+                        self.ocr = PaddleOCR(lang='en')
                 
                 # Restore stderr
                 sys.stderr = old_stderr
@@ -718,6 +730,7 @@ class VideoThread(QThread):
             except Exception as e:
                 sys.stderr = old_stderr  # Restore stderr on error too
                 print(f"⚠️ Failed to initialize PaddleOCR: {e}")
+                print(f"   Note: OCR fallback to EasyOCR will be used if available")
                 self.ocr = None
 
             # Do not initialize EasyOCR eagerly to avoid startup delay.
@@ -1958,6 +1971,15 @@ class VideoThread(QThread):
         LANE_CONFIGS = self.globals_ref['LANE_CONFIGS']
         TL_ROIS = self.globals_ref['TL_ROIS']
         DIRECTION_ROIS = self.globals_ref.get('DIRECTION_ROIS', [])
+        # Debug: Log direction ROIs when loaded
+        if DIRECTION_ROIS and not hasattr(self, '_direction_rois_logged'):
+            self._direction_rois_logged = True
+            print(f"📍 Direction ROIs loaded: {len(DIRECTION_ROIS)} zone(s)")
+            for i, roi in enumerate(DIRECTION_ROIS):
+                allowed = roi.get('allowed_directions', roi.get('primary_direction', 'unknown'))
+                roi_name = roi.get('name', f'ROI_{i}')
+                print(f"   └─ {roi_name}: allowed_directions={allowed}")
+        
         # Don't cache _show_all_boxes - read it fresh each time to get latest value
         is_on_stop_line = self.globals_ref['is_on_stop_line']
         check_tl_violation = self.globals_ref['check_tl_violation']
@@ -2165,6 +2187,8 @@ class VideoThread(QThread):
                                     # Step 2: Validate plate format based on vehicle class
                                     is_valid, cleaned_plate = validate_license_plate(corrected_text, veh_cls_id)
                                     if is_valid:
+                                        # RETRY MECHANISM:
+                                        # Only save VALID formatted plates to vehicle_ocr_texts
                                         stable_plate = self._update_stable_plate(veh_track_id, cleaned_plate)
                                         if stable_plate:
                                             formatted_plate = format_vietnamese_plate(stable_plate, veh_cls_id)
@@ -2176,13 +2200,11 @@ class VideoThread(QThread):
                                                     print(f"✅ OCR [VALID] Vehicle ID:{veh_track_id} → '{formatted_plate}'")
                                         elif self.enable_ocr_debug_logs:
                                             print(f"⏳ OCR [WAIT STABLE] Vehicle ID:{veh_track_id} → '{cleaned_plate}'")
-                                        if stable_plate:
-                                            formatted_plate = format_vietnamese_plate(stable_plate, veh_cls_id)
-                                            self.vehicle_ocr_texts[veh_track_id] = formatted_plate
-                                            if self.enable_ocr_debug_logs:
-                                                print(f"🟡 OCR [LOOSE ACCEPT] Vehicle ID:{veh_track_id} → '{formatted_plate}'")
-                                    elif self.enable_ocr_debug_logs:
-                                        print(f"❌ OCR [INVALID FORMAT] Vehicle ID:{veh_track_id} → '{ocr_text}' → '{corrected_text}' (cleaned: '{cleaned_plate}')")
+                                    else:
+                                        # Invalid format: do NOT save, will retry on next frame
+                                        if self.enable_ocr_debug_logs:
+                                            print(f"❌ OCR [INVALID FORMAT] Vehicle ID:{veh_track_id} → '{ocr_text}' → '{corrected_text}'")
+                                            print(f"   ↻ Will retry on next frame (format mismatch)")
                             elif self.enable_ocr_debug_logs:
                                 reason = self._get_ocr_skip_reason(veh_track_id, plate_w, plate_h)
                                 print(f"⏭️ OCR skipped Vehicle ID:{veh_track_id}: {reason}")
@@ -2235,6 +2257,8 @@ class VideoThread(QThread):
                                     # Step 2: Validate plate format based on vehicle class
                                     is_valid, cleaned_plate = validate_license_plate(corrected_text, veh_cls_id)
                                     if is_valid:
+                                        # RETRY MECHANISM:
+                                        # Only save VALID formatted plates
                                         stable_plate = self._update_stable_plate(veh_track_id, cleaned_plate)
                                         if stable_plate:
                                             ocr_text = format_vietnamese_plate(stable_plate, veh_cls_id)
@@ -2245,14 +2269,11 @@ class VideoThread(QThread):
                                                     print(f"✅ OCR [Relative VALID] Vehicle ID:{veh_track_id} → '{ocr_text}'")
                                         elif self.enable_ocr_debug_logs:
                                             print(f"⏳ OCR [Relative WAIT STABLE] Vehicle ID:{veh_track_id} → '{cleaned_plate}'")
-                                    elif self._is_loose_ocr_candidate(cleaned_plate):
-                                        stable_plate = self._update_stable_plate(veh_track_id, cleaned_plate)
-                                        if stable_plate:
-                                            ocr_text = format_vietnamese_plate(stable_plate, veh_cls_id)
-                                            if self.enable_ocr_debug_logs:
-                                                print(f"🟡 OCR [Relative LOOSE ACCEPT] Vehicle ID:{veh_track_id} → '{ocr_text}'")
-                                    elif self.enable_ocr_debug_logs:
-                                        print(f"❌ OCR [Relative INVALID] Vehicle ID:{veh_track_id} → '{raw_ocr_text}' → '{corrected_text}' (retry next frame)")
+                                    else:
+                                        # Invalid format: do NOT save, will retry on next frame
+                                        if self.enable_ocr_debug_logs:
+                                            print(f"❌ OCR [Relative INVALID] Vehicle ID:{veh_track_id} → '{raw_ocr_text}'")
+                                            print(f"   ↻ Will retry on next frame (format mismatch)")
                             elif not ocr_text and self.enable_ocr_debug_logs:
                                 reason = self._get_ocr_skip_reason(veh_track_id, plate_w, plate_h)
                                 print(f"⏭️ OCR [Relative] skipped Vehicle ID:{veh_track_id}: {reason}")
@@ -2301,6 +2322,16 @@ class VideoThread(QThread):
             for veh_id in list(self.vehicle_last_ocr_frame.keys()):
                 if veh_id not in current_vehicle_ids:
                     del self.vehicle_last_ocr_frame[veh_id]
+            
+            # Clean up vehicle_tracker locked directions when vehicle disappears
+            if hasattr(self.vehicle_tracker, 'locked_directions'):
+                for veh_id in list(self.vehicle_tracker.locked_directions.keys()):
+                    if veh_id not in current_vehicle_ids:
+                        del self.vehicle_tracker.locked_directions[veh_id]
+            if hasattr(self.vehicle_tracker, 'last_significant_move_time'):
+                for veh_id in list(self.vehicle_tracker.last_significant_move_time.keys()):
+                    if veh_id not in current_vehicle_ids:
+                        del self.vehicle_tracker.last_significant_move_time[veh_id]
         
         # Process vehicles with direction detection
         for veh in vehicles:
@@ -2315,6 +2346,30 @@ class VideoThread(QThread):
             # Track vehicle position for direction calculation using OOP
             if track_id != -1:
                 vehicle_direction = self.vehicle_tracker.update_position(track_id, cx, cy)
+                
+                # Debug: Log direction detection for new vehicles (first frame)
+                if DIRECTION_ROIS and vehicle_direction != 'unknown':
+                    if not hasattr(self, '_logged_vehicle_directions'):
+                        self._logged_vehicle_directions = set()
+                    if track_id not in self._logged_vehicle_directions:
+                        self._logged_vehicle_directions.add(track_id)
+                        print(f"📏 Direction detected: {vehicle_label} (ID={track_id}) → {vehicle_direction}")
+                
+                # ⚠️ CHECK NGƯỢC CHIỀU FIRST (Opposite Direction - angle-based, independent of stopline/ROI)
+                # Detect when vehicle moves COMPLETELY opposite to reference vector (> 130°)
+                if track_id not in DIRECTION_VIOLATORS:
+                    angle_diff = self.vehicle_tracker.get_angle_difference(track_id)
+                    
+                    if angle_diff is not None:
+                        # ❌ VIOLATION: angle difference > 130° (opposite direction)
+                        if angle_diff > 130:
+                            self.violation_detector.add_violation(track_id, 'ngoc_chieu')
+                            DIRECTION_VIOLATORS.add(track_id)
+                            VIOLATOR_TRACK_IDS.add(track_id)
+                            plate_text = self.vehicle_ocr_texts.get(track_id, '')
+                            plate_info = f" | Bien so: {plate_text}" if plate_text else " | Bien so: Chua doc duoc"
+                            vehicle_angle = self.vehicle_tracker.get_vehicle_angle(track_id)
+                            print(f"🚨 NGƯỢC CHIỀU (Opposite Direction): {vehicle_label} (ID={track_id}) angle={vehicle_angle:.1f}° vs ref={self.vehicle_tracker.ref_angle:.1f}° (diff={angle_diff:.1f}°){plate_info}")
                 
                 # Check if vehicle crossed THE stop line
                 if is_on_stop_line(cx, cy, threshold=20):
@@ -2351,8 +2406,8 @@ class VideoThread(QThread):
                         else:
                             print(f"✅ Vehicle passed: {vehicle_label} (ID={track_id}) Dir={vehicle_direction} - {reason}")
                         
-                        # ⚠️ CRITICAL: Check direction violation ONCE when crossing stopline
-                        # Find which ROI the vehicle is in AT THE MOMENT of crossing
+                        # ⚠️ CRITICAL: Check "SAI HƯỚNG" (Wrong Direction) violation ONCE when crossing stopline
+                        # Based on allowed_directions in Direction ROI - check each ROI the vehicle enters
                         if DIRECTION_ROIS and vehicle_direction != 'unknown':
                             for roi_idx, roi in enumerate(DIRECTION_ROIS):
                                 roi_points = roi.get('points', [])
@@ -2374,13 +2429,13 @@ class VideoThread(QThread):
                                     
                                     # Check if vehicle direction is allowed
                                     if vehicle_direction not in allowed_dirs:
-                                        self.violation_detector.add_violation(track_id, 'direction')
+                                        self.violation_detector.add_violation(track_id, 'sai_huong')
                                         DIRECTION_VIOLATORS.add(track_id)
                                         VIOLATOR_TRACK_IDS.add(track_id)
                                         plate_text = self.vehicle_ocr_texts.get(track_id, '')
                                         plate_info = f" | Bien so: {plate_text}" if plate_text else " | Bien so: Chua doc duoc"
                                         roi_name = roi.get('name', f'ROI_{roi_idx}')
-                                        print(f"🚨 DIRECTION VIOLATION: {vehicle_label} (ID={track_id}) went {vehicle_direction} in {roi_name} (allowed: {allowed_dirs}){plate_info}")
+                                        print(f"🚨 SAI HƯỚNG (Wrong Direction): {vehicle_label} (ID={track_id}) went {vehicle_direction} in {roi_name} (allowed: {allowed_dirs}){plate_info}")
                                     break
             
             # Check lane violation (does NOT require stopline)
@@ -2444,7 +2499,14 @@ class VideoThread(QThread):
                     if is_lane_violator:
                         violation_labels.append("SAI LAN")
                     if is_direction_violator:
-                        violation_labels.append("SAI HUONG")
+                        # Check which type of direction violation
+                        if self.violation_detector.has_violation(track_id, 'ngoc_chieu'):
+                            violation_labels.append("NGOC CHIEU")
+                        elif self.violation_detector.has_violation(track_id, 'sai_huong'):
+                            violation_labels.append("SAI HUONG")
+                        else:
+                            # Fallback for old 'direction' type violations
+                            violation_labels.append("SAI HUONG")
                     
                     if violation_labels:
                         label_text += f" [{', '.join(violation_labels)}]"

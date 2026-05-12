@@ -19,10 +19,14 @@ class VehicleTracker:
         """
         self.positions: Dict[int, List[Tuple[int, int, float]]] = {}
         self.directions: Dict[int, str] = {}
+        self.vehicle_angles: Dict[int, float] = {}  # Store actual movement angle for each vehicle
         self.stopline_start_positions: Dict[int, Tuple[int, int, float]] = {}  # Điểm bắt đầu khi qua stopline
+        self.locked_directions: Dict[int, str] = {}  # Directions locked when vehicle stopped
+        self.last_significant_move_time: Dict[int, float] = {}  # Track when vehicle last moved significantly
         self.time_window = time_window  # 2 giây
         self.min_distance = min_distance  # 20 pixels
         self.ref_angle = ref_angle if ref_angle is not None else 90.0  # Default: 90° = xuống dưới
+        self.stop_detection_window = 0.5  # 0.5s để detect xe dừng
     
     def mark_stopline_crossing(self, track_id: int, x: int, y: int):
         """Đánh dấu điểm bắt đầu khi xe vừa qua stopline"""
@@ -36,6 +40,7 @@ class VehicleTracker:
         
         if track_id not in self.positions:
             self.positions[track_id] = []
+            self.last_significant_move_time[track_id] = current_time
         
         # Thêm vị trí mới
         self.positions[track_id].append((x, y, current_time))
@@ -47,11 +52,61 @@ class VehicleTracker:
             if pos[2] >= cutoff_time
         ]
         
-        # Tính direction
+        # ⚠️ LOCK DIRECTION LOGIC: Detect when vehicle stopped
+        # If direction is locked (xe dừng), return locked direction
+        if track_id in self.locked_directions:
+            # Check if vehicle is still stopped (movement < min_distance in stop_detection_window)
+            stopped_time = current_time - self.last_significant_move_time.get(track_id, current_time)
+            
+            # If vehicle moved significantly again, unlock
+            if self._check_significant_movement(track_id):
+                # Vehicle started moving again - unlock direction
+                del self.locked_directions[track_id]
+                self.last_significant_move_time[track_id] = current_time
+                # Recalculate direction
+                direction = self._calculate_direction(track_id)
+                self.directions[track_id] = direction
+                return direction
+            else:
+                # Vehicle still stopped - return locked direction
+                return self.locked_directions[track_id]
+        
+        # Tính direction (bình thường khi xe đang di chuyển)
         direction = self._calculate_direction(track_id)
         self.directions[track_id] = direction
         
+        # ⚠️ Lock direction if vehicle is NOT moving significantly
+        if direction != 'unknown' and not self._check_significant_movement(track_id):
+            # Vehicle has stopped - lock current direction
+            time_since_move = current_time - self.last_significant_move_time.get(track_id, current_time)
+            if time_since_move > self.stop_detection_window:
+                self.locked_directions[track_id] = direction
+        elif direction != 'unknown':
+            # Vehicle is moving - update last significant move time
+            self.last_significant_move_time[track_id] = current_time
+        
         return direction
+    
+    def _check_significant_movement(self, track_id: int) -> bool:
+        """Check if vehicle moved significantly in recent frames"""
+        if track_id not in self.positions or len(self.positions[track_id]) < 2:
+            return False
+        
+        positions = self.positions[track_id]
+        current_pos = positions[-1]
+        
+        # Check distance from all positions in stop_detection_window
+        check_time = time.time() - self.stop_detection_window
+        for pos in positions:
+            if pos[2] < check_time:
+                continue
+            dx = current_pos[0] - pos[0]
+            dy = current_pos[1] - pos[1]
+            distance = math.sqrt(dx**2 + dy**2)
+            if distance >= self.min_distance:
+                return True
+        
+        return False
     
     def _calculate_direction(self, track_id: int) -> str:
         """Tính toán hướng di chuyển dựa trên time window"""
@@ -62,6 +117,7 @@ class VehicleTracker:
         
         # Cần ít nhất 1 điểm (nếu có stopline start)
         if len(positions) < 1:
+            self.vehicle_angles[track_id] = None
             return 'unknown'
         
         current_time = time.time()
@@ -77,12 +133,14 @@ class VehicleTracker:
                 # Quá 2s rồi, xóa stopline start và dùng logic cũ
                 del self.stopline_start_positions[track_id]
                 if len(positions) < 2:
+                    self.vehicle_angles[track_id] = None
                     return 'unknown'
                 start_pos = positions[0]
             # else: Dùng stopline start position
         else:
             # Chưa qua stopline hoặc đã quá 2s, dùng điểm đầu trong window
             if len(positions) < 2:
+                self.vehicle_angles[track_id] = None
                 return 'unknown'
             start_pos = positions[0]
         
@@ -95,13 +153,15 @@ class VehicleTracker:
         
         # Nếu di chuyển quá ngắn, chưa đủ để xác định hướng
         if distance < self.min_distance:
+            self.vehicle_angles[track_id] = None
             return 'unknown'
         
-        # Tính góc (độ) -180 to 180
-        angle = math.degrees(math.atan2(dy, dx))
+        # Tính góc tuyệt đối (độ) -180 to 180
+        absolute_angle = math.degrees(math.atan2(dy, dx))
+        self.vehicle_angles[track_id] = absolute_angle  # ← Lưu góc tuyệt đối
         
         # Tính góc tương đối so với hướng tham chiếu
-        relative_angle = angle - self.ref_angle
+        relative_angle = absolute_angle - self.ref_angle
         
         # Chuẩn hóa về -180 to 180
         while relative_angle > 180:
@@ -136,6 +196,32 @@ class VehicleTracker:
         """Lấy hướng hiện tại của vehicle"""
         return self.directions.get(track_id, 'unknown')
     
+    def get_vehicle_angle(self, track_id: int) -> Optional[float]:
+        """Lấy góc di chuyển tuyệt đối của vehicle (độ)"""
+        return self.vehicle_angles.get(track_id)
+    
+    def get_angle_difference(self, track_id: int) -> Optional[float]:
+        """Lấy độ lệch góc so với reference vector (độ, 0-180)
+        
+        Returns:
+            Độ lệch trong khoảng [0, 180], None nếu không có data
+        """
+        vehicle_angle = self.vehicle_angles.get(track_id)
+        if vehicle_angle is None:
+            return None
+        
+        # Tính hiệu
+        diff = vehicle_angle - self.ref_angle
+        
+        # Chuẩn hóa về -180 to 180
+        while diff > 180:
+            diff -= 360
+        while diff < -180:
+            diff += 360
+        
+        # Lấy giá trị tuyệt đối (0 to 180)
+        return abs(diff)
+    
     def set_ref_angle(self, ref_angle: float):
         """Cập nhật góc tham chiếu cho hướng đi thẳng"""
         self.ref_angle = ref_angle
@@ -145,3 +231,7 @@ class VehicleTracker:
         """Xóa toàn bộ tracking data"""
         self.positions.clear()
         self.directions.clear()
+        self.vehicle_angles.clear()
+        self.locked_directions.clear()
+        self.last_significant_move_time.clear()
+        self.stopline_start_positions.clear()

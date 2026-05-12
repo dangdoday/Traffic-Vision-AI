@@ -11,7 +11,9 @@ class ViolationDetector:
         self.passed_vehicles: Set[int] = set()
         self.red_light_violators: Set[int] = set()
         self.lane_violators: Set[int] = set()
-        self.direction_violators: Set[int] = set()  # Vehicles going wrong direction
+        self.direction_violators: Set[int] = set()  # Vehicles going wrong direction (legacy)
+        self.ngoc_chieu_violators: Set[int] = set()  # Opposite direction (angle > 130°)
+        self.sai_huong_violators: Set[int] = set()  # Wrong direction per ROI
         self.violator_track_ids: Set[int] = set()
         
         # Đếm phương tiện
@@ -100,6 +102,12 @@ class ViolationDetector:
             self.lane_violators.add(track_id)
         elif violation_type == 'direction':
             self.direction_violators.add(track_id)
+        elif violation_type == 'ngoc_chieu':
+            self.ngoc_chieu_violators.add(track_id)
+            self.direction_violators.add(track_id)  # Also add to legacy set
+        elif violation_type == 'sai_huong':
+            self.sai_huong_violators.add(track_id)
+            self.direction_violators.add(track_id)  # Also add to legacy set
     
     def mark_vehicle_passed(self, track_id: int, vehicle_class: int):
         """Đánh dấu xe đã qua stopline và đếm theo loại"""
@@ -115,6 +123,20 @@ class ViolationDetector:
     def is_violator(self, track_id: int) -> bool:
         """Kiểm tra xe có vi phạm không"""
         return track_id in self.violator_track_ids
+    
+    def has_violation(self, track_id: int, violation_type: str) -> bool:
+        """Kiểm tra xe có vi phạm loại cụ thể không"""
+        if violation_type == 'red_light':
+            return track_id in self.red_light_violators
+        elif violation_type == 'lane':
+            return track_id in self.lane_violators
+        elif violation_type == 'direction':
+            return track_id in self.direction_violators
+        elif violation_type == 'ngoc_chieu':
+            return track_id in self.ngoc_chieu_violators
+        elif violation_type == 'sai_huong':
+            return track_id in self.sai_huong_violators
+        return False
     
     def get_statistics(self) -> Dict:
         """Lấy thống kê vi phạm"""
