@@ -195,6 +195,9 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         
         # Pre-load YOLO model in main thread to avoid DLL issues in QThread
         self.yolo_model = None
+        self.model_loading = False  # Flag to track if model is being loaded asynchronously
+        self.model_loader_thread = None  # Thread for loading models
+        self.pending_detection_start = False  # Flag: auto-start detection after model loads
         self.current_model_type = None
         self.current_model_config = None
         self.device = 'cuda:0' if CUDA_AVAILABLE else 'cpu'  # Default device
@@ -210,11 +213,13 @@ class MainWindow(QMainWindow, DirectionROIHandlerMixin, ReferenceVectorHandlerMi
         # Setup menu bar AFTER available_models is initialized
         self.setup_menu_bar()
         
-        # Auto-load first available model
+        # Auto-load first available model synchronously at startup
+        # This ensures model is ready before user can click Start Detection
         if YOLO_AVAILABLE and self.available_models:
             first_model_type = list(self.available_models.keys())[0]
             first_weight = self.available_models[first_model_type]["weights"][0]
-            self.load_model(first_model_type, first_weight)
+            print(f"🔄 Loading model at startup (sync): {first_model_type} - {first_weight}")
+            self.load_model(first_model_type, first_weight, async_mode=False)
         else:
             print("⚠️ YOLO not available or no models found, detection disabled")
         

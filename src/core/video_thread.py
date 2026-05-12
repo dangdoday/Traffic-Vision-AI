@@ -446,17 +446,18 @@ def validate_license_plate(plate_text, vehicle_class):
       - Supported canonical families for cars (ô tô):
             1) XX + L + N4  (e.g., 30A1234)
             2) XX + L + N5  (e.g., 30A12345)
-            3) XX + L + N6  (e.g., 61D206617, two-line display: 61D2-066.17)
+            Note: 6-digit cars (XX + L + N6) only from 2-line merged OCR, not from YOLO class 0
       - Supported canonical families for motorcycles (xe máy):
-            4) XX + L + N + N4  (e.g., 30A11234, 1 letter + 1 digit + 4 digits)
-            5) XX + LL + N4     (e.g., 30AB1234, 2 letters + 4 digits)
+            3) XX + L + N + N4  (e.g., 30A11234, 1 letter + 1 digit + 4 digits)
+            4) XX + LL + N4     (e.g., 30AB1234, 2 letters + 4 digits)
+            5) XX + L + N6      (e.g., 61D206617, 6-digit from 2-line merged OCR)
     """
     if not plate_text:
         return (False, "")
 
     canonical = _sanitize_ocr_text(plate_text)
     
-    # Car plates (1 letter only)
+    # Car plates (1 letter only) - 4 or 5 digits only for YOLO class 0
     m_one_letter_4 = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d{4})$', canonical)
     m_one_letter_5 = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d{5})$', canonical)
     m_one_letter_6 = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d{6})$', canonical)
@@ -465,8 +466,17 @@ def validate_license_plate(plate_text, vehicle_class):
     m_motorcycle_1L1D = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d)(\d{4})$', canonical)
     m_motorcycle_2L = re.match(r'^(\d{2})([A-HJ-NPR-Z]{2})(\d{4})$', canonical)
     
-    m = (m_one_letter_4 or m_one_letter_5 or m_one_letter_6 or 
-         m_motorcycle_1L1D or m_motorcycle_2L)
+    # Vehicle class 0 = car (ô tô), should only have 4-5 digits, not 6
+    # 6-digit cars only come from 2-line merged OCR, not from single-line YOLO detection
+    if vehicle_class == 0:  # Car class
+        m = (m_one_letter_4 or m_one_letter_5)
+        # Reject if matched 6-digit (OCR error: extra/missing digit)
+        if m_one_letter_6 and not m:
+            return (False, canonical)
+    else:
+        # For motorcycles and others, allow all patterns including 6-digit
+        m = (m_one_letter_4 or m_one_letter_5 or m_one_letter_6 or 
+             m_motorcycle_1L1D or m_motorcycle_2L)
     
     if m is None:
         return (False, canonical)
@@ -499,15 +509,15 @@ def format_vietnamese_plate(plate_text, vehicle_class=0):
     cleaned = _sanitize_ocr_text(plate_text)
     is_motorcycle = vehicle_class == 3  # YOLO class 3 = motorcycle
     
-    # 6-digit cars (2-line): displayed as XX L F1 / F2...F5
-    # Example: 61D206617 -> 61D2 / 06617
+    # 6-digit cars (2-line): displayed as XX L / NNNNNN
+    # Example: 61D206617 -> 61D / 206617
     m_one_letter_6 = re.match(r'^(\d{2})([A-HJ-NPR-Z])(\d{6})$', cleaned)
     if m_one_letter_6:
         province = m_one_letter_6.group(1)
         letter = m_one_letter_6.group(2)
         tail6 = m_one_letter_6.group(3)
-        line1 = f"{province}{letter}{tail6[0]}"
-        line2 = tail6[1:]
+        line1 = f"{province}{letter}"
+        line2 = tail6
         return f"{line1} / {line2}"
 
     # Standard: 1 letter or 2 letters + 4-5 digits

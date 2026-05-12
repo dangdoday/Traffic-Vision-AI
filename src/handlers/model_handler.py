@@ -3,7 +3,8 @@ Model Handler Mixin
 Contains methods for YOLO model loading and configuration management
 """
 import sys
-from PyQt5.QtWidgets import QMessageBox
+from PyQt5.QtWidgets import QMessageBox, QProgressDialog
+from PyQt5.QtCore import Qt
 import torch
 
 
@@ -26,8 +27,15 @@ class ModelHandlerMixin:
             self.load_model(model_type, first_weight)
             self.statusBar().showMessage(f"Loaded model: {model_type}")
     
-    def load_model(self, model_type, weight_name):
-        """Load model dynamically based on selection"""
+    def load_model(self, model_type, weight_name, async_mode=False):
+        """Load model with optional async mode
+        
+        Args:
+            model_type: Type of model
+            weight_name: Weight file name
+            async_mode: If True, load in background (with progress dialog). 
+                       If False, load synchronously (for startup).
+        """
         main = self._get_globals()
         
         if not main.YOLO_AVAILABLE:
@@ -37,44 +45,138 @@ class ModelHandlerMixin:
         try:
             from model_config import get_weight_path, get_model_config
             from ultralytics import YOLO
+            from core.model_loader import ModelLoaderThread
             
-            print(f"🔄 Loading {model_type} model: {weight_name}...")
             weight_path = get_weight_path(model_type, weight_name)
-            self.yolo_model = YOLO(weight_path)
-            
-            # Move model to selected device (GPU or CPU)
             device = getattr(self, 'device', 'cuda:0' if torch.cuda.is_available() else 'cpu')
-            self.yolo_model.to(device)
-            print(f"📦 Model loaded on device: {device}")
             
-            self.current_model_type = model_type
-            self.current_model_config = get_model_config(model_type)
+            if async_mode:
+                # Load asynchronously with progress dialog (for menu selection)
+                print(f"🔄 Loading {model_type} model (async): {weight_name}...")
+                self.model_loading = True
+                
+                if hasattr(self, 'status_label'):
+                    self.status_label.setText(f"Status: Loading {model_type}...")
+                
+                # Create progress dialog
+                self.model_progress_dialog = QProgressDialog(
+                    f"Đang tải {model_type} model...\n\n" +
+                    "Lý do hệ thống đang khựng:\n" +
+                    "• Đọc file weights (~100-200MB)\n" +
+                    "• Phân tích model architecture\n" +
+                    "• Chuyển lên GPU (nếu có)\n\n" +
+                    "Vui lòng chờ...",
+                    None
+                )
+                self.model_progress_dialog.setCancelButton(None)
+                self.model_progress_dialog.setWindowModality(Qt.WindowModal)
+                self.model_progress_dialog.setRange(0, 0)
+                self.model_progress_dialog.show()
+                
+                # Create and start loader thread
+                self.model_loader_thread = ModelLoaderThread(model_type, weight_path, device)
+                self.model_loader_thread.model_loaded.connect(self._on_model_loaded)
+                self.model_loader_thread.load_progress.connect(self._on_model_load_progress)
+                self.model_loader_thread.load_error.connect(self._on_model_load_error)
+                self.model_loader_thread.start()
+            else:
+                # Load synchronously (for startup) - ensure model is ready immediately
+                print(f"🔄 Loading {model_type} model (sync): {weight_name}...")
+                
+                model = YOLO(weight_path)
+                model.to(device)
+                
+                self.yolo_model = model
+                self.current_model_type = model_type
+                self.current_model_config = get_model_config(model_type)
+                
+                # Update thread model if thread exists
+                from core import VideoThread
+                if hasattr(self, 'thread') and self.thread is not None and isinstance(self.thread, VideoThread):
+                    self.thread.set_model(self.yolo_model)
+                    self.thread.model_config = self.current_model_config
+                    print(f"✅ Model also set in VideoThread")
+                
+                # Update spinboxes
+                if hasattr(self, 'imgsz_spinbox') and self.current_model_config:
+                    self.imgsz_spinbox.setValue(self.current_model_config['default_imgsz'])
+                if hasattr(self, 'conf_spinbox') and self.current_model_config:
+                    self.conf_spinbox.setValue(self.current_model_config['default_conf'])
+                
+                if hasattr(self, 'status_label'):
+                    self.status_label.setText(f"Status: Model ready - {model_type}")
+                print(f"✅ Model loaded successfully")
             
-            # Update thread model if thread exists (always update, not just when model_loaded)
-            # ⚠️ FIX: Check that thread is our VideoThread object, not QThread.thread() method
-            from core import VideoThread
-            if hasattr(self, 'thread') and self.thread is not None and isinstance(self.thread, VideoThread):
-                self.thread.set_model(self.yolo_model)
-                self.thread.model_config = self.current_model_config
-                print(f"✅ Model also set in VideoThread")
-            
-            # Update spinboxes with model's default values
-            if hasattr(self, 'imgsz_spinbox'):
-                self.imgsz_spinbox.setValue(self.current_model_config['default_imgsz'])
-            if hasattr(self, 'conf_spinbox'):
-                self.conf_spinbox.setValue(self.current_model_config['default_conf'])
-            
-            print(f"✅ Model loaded: {weight_path}")
-            if hasattr(self, 'status_label'):
-                self.status_label.setText(f"Status: Loaded {model_type} - {weight_name}")
             return True
         except Exception as e:
             import traceback
             print(f"❌ Failed to load model: {e}")
             print(traceback.format_exc())
+            self.model_loading = False
+            if hasattr(self, 'model_progress_dialog'):
+                self.model_progress_dialog.close()
             if hasattr(self, 'status_label'):
                 QMessageBox.warning(self, "Model Load Error", f"Could not load model:\n{e}")
             return False
+    
+    def _on_model_loaded(self, model):
+        """Callback when model finishes loading"""
+        self.model_loading = False
+        
+        # Close progress dialog
+        if hasattr(self, 'model_progress_dialog'):
+            self.model_progress_dialog.close()
+        
+        if model is None:
+            if hasattr(self, 'status_label'):
+                self.status_label.setText("Status: Model load failed")
+            return
+        
+        self.yolo_model = model
+        
+        # Update thread model if thread exists
+        from core import VideoThread
+        if hasattr(self, 'thread') and self.thread is not None and isinstance(self.thread, VideoThread):
+            self.thread.set_model(self.yolo_model)
+            self.thread.model_config = self.current_model_config
+            print(f"✅ Model also set in VideoThread")
+        
+        # Update spinboxes with model's default values
+        if hasattr(self, 'imgsz_spinbox') and self.current_model_config:
+            self.imgsz_spinbox.setValue(self.current_model_config['default_imgsz'])
+        if hasattr(self, 'conf_spinbox') and self.current_model_config:
+            self.conf_spinbox.setValue(self.current_model_config['default_conf'])
+        
+        if hasattr(self, 'status_label'):
+            self.status_label.setText(f"Status: Model ready - {self.current_model_type}")
+        print(f"✅ Model loaded successfully")
+        
+        # If user clicked Start Detection while model was loading, auto-start now
+        if getattr(self, 'pending_detection_start', False):
+            self.pending_detection_start = False
+            print("🚀 Auto-starting detection after model load...")
+            # Schedule start_detection to run on next event loop iteration
+            from PyQt5.QtCore import QTimer
+            QTimer.singleShot(100, self.start_detection)
+    
+    def _on_model_load_progress(self, message):
+        """Callback for model loading progress messages"""
+        print(message)
+        if hasattr(self, 'status_label'):
+            self.status_label.setText(f"Status: {message}")
+    
+    def _on_model_load_error(self, error_message):
+        """Callback when model loading fails"""
+        self.model_loading = False
+        
+        # Close progress dialog
+        if hasattr(self, 'model_progress_dialog'):
+            self.model_progress_dialog.close()
+        
+        print(error_message)
+        if hasattr(self, 'status_label'):
+            self.status_label.setText("Status: Model load failed")
+        QMessageBox.warning(self, "Model Load Error", error_message)
     
     def update_weight_combo(self):
         """Update weight dropdown based on selected model type"""
@@ -126,9 +228,10 @@ class ModelHandlerMixin:
         weight_name = self.weight_combo.currentText()
         
         if weight_name:
-            success = self.load_model(model_type, weight_name)
+            # Load asynchronously when user selects a model (not at startup)
+            success = self.load_model(model_type, weight_name, async_mode=True)
             if success:
-                # Update spinboxes with model default values
+                # Update spinboxes with model default values (will be set when async load finishes)
                 if self.current_model_config:
                     self.imgsz_spinbox.setValue(self.current_model_config['default_imgsz'])
                     self.conf_spinbox.setValue(self.current_model_config['default_conf'])

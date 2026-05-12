@@ -132,18 +132,29 @@ class DetectionHandlerMixin:
         CAR_COUNT = g.CAR_COUNT
         
         if not g._detection_running:
+            # Check if model is currently loading
+            if getattr(self, 'model_loading', False):
+                # Set flag to auto-start after model loads
+                self.pending_detection_start = True
+                self.status_label.setText("Status: Waiting for model to load... Detection will start automatically.")
+                print("⏳ Model is loading. Detection will start automatically when ready.")
+                return
+            
+            # Model should have been auto-loaded at startup
+            # If it's still None, something went wrong
+            if self.yolo_model is None:
+                self.status_label.setText("Status: Model not available")
+                QMessageBox.warning(self, "Model Not Available", 
+                    "Model failed to load at startup or is not available.\nPlease check model folder and restart the application.")
+                print("❌ Detection failed: yolo_model is None (should have been loaded at startup)")
+                return
+            
             # Debug: Check prerequisites
             print(f"🔍 Debug - yolo_model: {self.yolo_model is not None}")
             print(f"🔍 Debug - thread exists: {hasattr(self, 'thread')}")
             if hasattr(self, 'thread'):
                 print(f"🔍 Debug - thread.model: {self.thread.model is not None}")
                 print(f"🔍 Debug - thread.model_loaded: {self.thread.model_loaded}")
-            
-            if self.yolo_model is None:
-                self.status_label.setText("Status: Model not loaded at startup")
-                QMessageBox.warning(self, "No Model", "Please select a model first!")
-                print("❌ Detection failed: yolo_model is None")
-                return
             
             # Check if reference vector is set (critical for direction detection accuracy)
             if self.ref_vector_p1 is None or self.ref_vector_p2 is None:
